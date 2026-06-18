@@ -234,21 +234,16 @@ input { font-family: inherit; }
 .card-product:active { transform: translateY(-1px) scale(.99); }
 /* thumb area — photo if present, otherwise a themed icon tile */
 .card-product .thumb {
-  height: 220px; flex: none; position: relative; overflow: hidden;
+  height: 240px; flex: none; position: relative; overflow: hidden;
   display: grid; place-items: center;
-  background: #ffffff;   /* matches the photos' white background so it blends */
+  background-color: #fff;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
 }
-/* photos are pre-cropped tight to the product. Centered + max-width/height
-   shows the whole product at a large size, and works on old iOS Safari
-   (which mishandles object-fit on absolutely-positioned images). */
-.card-product .thumb .ph { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 98%; max-height: 98%; width: auto; height: auto; display: block; }
+/* subtle top shade so the quantity badge stays readable over a photo */
+.card-product .thumb.photo::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 46px; background: linear-gradient(rgba(46,26,13,0.22), transparent); pointer-events: none; }
 .card-product .thumb .icn-fallback { display: grid; place-items: center; color: var(--brown); }
 .card-product.sweets .thumb .icn-fallback { color: var(--caramel-600); }
 .card-product .thumb .icn-fallback svg { width: 40px; height: 40px; opacity: .85; }
-.card-product .thumb:has(.ph)::after { /* legibility for the badge, only over real photos */
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(180deg, rgba(46,26,13,0.18), transparent 38%);
-}
 .card-product .meta { padding: 14px 16px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .card-product .name-ar { font-family: var(--font-ar); font-weight: 800; font-size: 21px; color: var(--ink); line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
 .card-product .price { font-weight: 800; font-size: 21px; color: var(--brown); white-space: nowrap; flex: none; }
@@ -648,7 +643,7 @@ button, .card-product, .nav-btn, .cat-tab, .key, .pay-opt,
   .topbar { padding-top: calc(14px + env(safe-area-inset-top)); padding-bottom: 10px; }
   .topbar h1 { font-size: 23px; }
   .cat-tabs { padding-bottom: 12px; }
-  .card-product .thumb { height: 200px; }
+  .card-product .thumb { height: 220px; }
 }
 
 /* ============================================================

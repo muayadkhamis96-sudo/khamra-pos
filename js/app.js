@@ -151,12 +151,11 @@
       tabs.appendChild(b);
     });
   }
-  // Icon sits behind; the photo (if any) covers it. A missing/broken photo
-  // removes itself on error, revealing the icon underneath.
+  // Photo fills the thumb via a CSS background (cover) — reliable on old iOS
+  // Safari, unlike object-fit. Items without a photo show the themed icon.
   function thumbHTML(p) {
-    var ic = '<span class="icn-fallback">' + icon(ICON_FOR[p.icon] || 'cup') + '</span>';
-    var im = p.photo ? '<img class="ph" src="' + p.photo + '" alt="" onerror="this.remove()" />' : '';
-    return ic + im;
+    if (p.photo) return '<div class="thumb photo" style="background-image:url(' + p.photo + ')"></div>';
+    return '<div class="thumb"><span class="icn-fallback">' + icon(ICON_FOR[p.icon] || 'cup') + '</span></div>';
   }
   function renderProducts() {
     var grid = $('#productGrid'); grid.innerHTML = '';
@@ -169,7 +168,7 @@
       var card = el('button', 'card-product ' + p.category + (inCart ? ' in-cart' : '') + (p.photo ? ' has-photo' : ''));
       card.innerHTML =
         '<span class="badge-qty">' + (inCart ? D.num(inCart.qty, state.lang) : '') + '</span>' +
-        '<div class="thumb">' + thumbHTML(p) + '</div>' +
+        thumbHTML(p) +
         '<div class="meta">' +
           '<div class="name-ar">' + p.ar + '</div>' +
           '<div class="price">' + D.money(p.price, state.lang) + cur() + '</div>' +
