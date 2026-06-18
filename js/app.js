@@ -151,10 +151,10 @@
       tabs.appendChild(b);
     });
   }
-  // Photo fills the thumb via a CSS background (cover) — reliable on old iOS
-  // Safari, unlike object-fit. Items without a photo show the themed icon.
+  // Photo fills the thumb via an <img> with object-fit:cover (works on the
+  // booth's old iOS Safari). Items without a photo show the themed icon.
   function thumbHTML(p) {
-    if (p.photo) return '<div class="thumb photo" style="background-image:url(' + p.photo + ')"></div>';
+    if (p.photo) return '<div class="thumb photo"><img class="ph" src="' + p.photo + '" alt="" /></div>';
     return '<div class="thumb"><span class="icn-fallback">' + icon(ICON_FOR[p.icon] || 'cup') + '</span></div>';
   }
   function renderProducts() {

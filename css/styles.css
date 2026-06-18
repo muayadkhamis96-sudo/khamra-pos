@@ -237,10 +237,11 @@ input { font-family: inherit; }
   height: 240px; flex: none; position: relative; overflow: hidden;
   display: grid; place-items: center;
   background-color: #fff;
-  background-size: cover; background-position: center; background-repeat: no-repeat;
 }
+/* photo fills the tile (cropped tight to the product) */
+.card-product .thumb .ph { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
 /* subtle top shade so the quantity badge stays readable over a photo */
-.card-product .thumb.photo::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 46px; background: linear-gradient(rgba(46,26,13,0.22), transparent); pointer-events: none; }
+.card-product .thumb.photo::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 46px; background: linear-gradient(rgba(46,26,13,0.22), transparent); pointer-events: none; z-index: 1; }
 .card-product .thumb .icn-fallback { display: grid; place-items: center; color: var(--brown); }
 .card-product.sweets .thumb .icn-fallback { color: var(--caramel-600); }
 .card-product .thumb .icn-fallback svg { width: 40px; height: 40px; opacity: .85; }
