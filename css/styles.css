@@ -99,8 +99,8 @@ input { font-family: inherit; }
 }
 .lock::before, .lock::after { /* steam wisps — decorative, must not block taps */
   content: ''; position: absolute; width: 380px; height: 720px;
-  background: radial-gradient(closest-side, rgba(233,198,130,0.10), transparent 70%);
-  filter: blur(8px); opacity: .8;
+  background: radial-gradient(closest-side, rgba(233,198,130,0.09), transparent 70%);
+  opacity: .8;
   pointer-events: none;
 }
 .lock::before { left: 12%; top: -10%; transform: rotate(-8deg); }
@@ -111,12 +111,11 @@ input { font-family: inherit; }
   width: min(420px, 92vw);
   padding: 40px 36px 34px;
   text-align: center;
-  background: rgba(255, 251, 244, 0.06);
-  border: 1px solid rgba(243, 231, 211, 0.16);
+  /* solid-ish panel (no backdrop blur — too heavy for old iPads) */
+  background: rgba(72, 45, 24, 0.55);
+  border: 1px solid rgba(243, 231, 211, 0.18);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.08);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 .lock-logo { width: 168px; height: auto; margin: 0 auto 10px; display: block; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.35)); }
 .lock-tagline { color: var(--gold); letter-spacing: 4px; font-size: 12px; text-transform: uppercase; margin-bottom: 22px; opacity: .85; }
@@ -468,7 +467,7 @@ input { font-family: inherit; }
 .modal-bg {
   position: fixed; inset: 0; z-index: 60; display: none;
   align-items: center; justify-content: center;
-  background: rgba(46, 26, 13, 0.5); backdrop-filter: blur(4px);
+  background: rgba(46, 26, 13, 0.62);
   padding: 20px;
 }
 .modal-bg.on { display: flex; animation: fade .2s ease; }
@@ -646,4 +645,61 @@ button, .card-product, .nav-btn, .cat-tab, .key, .pay-opt,
   .topbar h1 { font-size: 23px; }
   .cat-tabs { padding-bottom: 12px; }
   .card-product .thumb { height: 134px; }
+}
+
+/* ============================================================
+   OLD SAFARI COMPATIBILITY (iOS 12 / Safari < 14.1 — iPad mini 3)
+   These browsers lack the `inset` shorthand and flexbox `gap`.
+   ============================================================ */
+/* `inset: 0` shorthand → longhand (universal, harmless on modern) */
+.app-bg, .lock, .modal-bg,
+.card-product .thumb .ph, .card-product .thumb::after,
+.rank .rank-th img, .top-photo img, .medit-photo img,
+.fl-sign .fl-mark .fl-mark-img {
+  top: 0; right: 0; bottom: 0; left: 0;
+}
+
+@supports not (inset: 0) {
+  /* logical inset positioning unsupported → physical (UI is RTL by default) */
+  .badge-qty { right: auto; left: 12px; }
+  .photo-rm { right: auto; left: 2px; }
+  .medit-photo .mi-add { right: auto; left: 2px; }
+  .order { right: 0; }
+
+  /* flexbox `gap` unsupported → emulate with margins on later children */
+  .pin-dots > * + *,
+  .topbar-right > * + *,
+  .cat-tabs > * + *,
+  .card-product .meta > * + *,
+  .btn-charge > * + *,
+  .line > * + *,
+  .stepper > * + *,
+  .btn > * + *,
+  .btn-row > * + *,
+  .rank > * + *,
+  .orow > * + *,
+  .chart > * + *,
+  .warn > * + *,
+  .toast > * + * { margin-inline-start: 0.6em; }
+
+  .pin-dots > * + * { margin-inline-start: 16px; }
+  .topbar-right > * + * { margin-inline-start: 12px; }
+  .cat-tabs > * + * { margin-inline-start: 10px; }
+  .btn-charge > * + * { margin-inline-start: 10px; }
+  .line > * + * { margin-inline-start: 10px; }
+  .stepper > * + * { margin-inline-start: 6px; }
+  .btn > * + * { margin-inline-start: 8px; }
+  .btn-row > * + * { margin-inline-start: 12px; }
+  .rank > * + * { margin-inline-start: 14px; }
+  .orow > * + * { margin-inline-start: 12px; }
+  .chart > * + * { margin-inline-start: 12px; }
+  .warn > * + * { margin-inline-start: 10px; }
+  .toast > * + * { margin-inline-start: 9px; }
+
+  /* column-direction flex → vertical margins */
+  .nav > * + * { margin-top: 6px; }
+  .nav-btn > * + * { margin-top: 5px; }
+  .bar-col > * + * { margin-top: 8px; }
+  .order-empty > * + * { margin-top: 14px; }
+  .pay-opt > * + * { margin-top: 10px; }
 }
