@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#5a3114" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Khamra" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>خمرة · Khamra POS</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/icon-180.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css?v=4" />
+</head>
+<body>
+  <div class="app-bg"></div>
+
+  <!-- ============ SVG ICON SPRITE ============ -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="flGrad" x1="14" y1="52" x2="52" y2="12" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#14C9AC"/><stop offset=".5" stop-color="#1E9DD0"/><stop offset="1" stop-color="#2F61E6"/>
+      </linearGradient>
+      <!-- products -->
+      <symbol id="i-cup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 10h11v4a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M16 11h2.5a2.5 2.5 0 0 1 0 5H16"/>
+        <path d="M8 3c-.6 1 .6 1.6 0 2.6M11 3c-.6 1 .6 1.6 0 2.6"/>
+      </symbol>
+      <symbol id="i-glass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 6h10l-1 13a2 2 0 0 1-2 1.8h-4A2 2 0 0 1 8 19z"/><path d="M7.4 11h9.2"/>
+        <path d="M10 2.8c-.5.8.5 1.3 0 2.1M13.5 2.8c-.5.8.5 1.3 0 2.1"/>
+      </symbol>
+      <symbol id="i-flower" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="2.4"/><path d="M12 9.6c0-3 .8-4.6 0-5.6-.8 1-.8 2.6 0 5.6M12 14.4c0 3-.8 4.6 0 5.6.8-1 .8-2.6 0-5.6"/>
+        <path d="M9.6 12c-3 0-4.6.8-5.6 0 1-.8 2.6-.8 5.6 0M14.4 12c3 0 4.6-.8 5.6 0-1 .8-2.6.8-5.6 0"/>
+        <path d="M10.3 10.3C8.2 8.2 6.9 7 6.8 5.7c1.3.1 2.5 1.4 4.6 3.5M13.7 13.7c2.1 2.1 3.4 3.3 3.5 4.6-1.3-.1-2.5-1.4-4.6-3.5"/>
+      </symbol>
+      <symbol id="i-honey" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3l7 4v6l-7 4-7-4V7z"/><path d="M12 3v6m0 0l7 4m-7-4L5 13m7 8v-8"/>
+      </symbol>
+      <symbol id="i-roll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="8.4"/><path d="M12 12 a3 3 0 1 0 .01 0 M12 12 a5.5 5.5 0 0 1 0 0" /><path d="M12 6.6a5.4 5.4 0 0 1 0 10.8"/>
+      </symbol>
+      <symbol id="i-croissant" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3.5 15.5c4-1 7-4 8.5-8 1.5 4 4.5 7 8.5 8-3 1.6-6.5 1.8-8.5 1.2-2 .6-5.5.4-8.5-1.2z"/>
+        <path d="M8 14.6 6.4 17M16 14.6 17.6 17M12 11.5V16"/>
+      </symbol>
+      <!-- nav -->
+      <symbol id="i-pos" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9 4.2 5h15.6L21 9z"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><path d="M9 13h6"/>
+      </symbol>
+      <symbol id="i-reports" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>
+      </symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3"/>
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+      </symbol>
+      <!-- stats -->
+      <symbol id="i-coins" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="12" cy="6.5" rx="7" ry="3"/><path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/><path d="M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>
+      </symbol>
+      <symbol id="i-receipt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 3h12v18l-2.5-1.6L13 21l-2.5-1.6L8 21l-2-1.6z"/><path d="M9 8h6M9 12h6"/>
+      </symbol>
+      <symbol id="i-stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3 21 8l-9 5-9-5z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/>
+      </symbol>
+      <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>
+      </symbol>
+      <symbol id="i-avg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19 20 5M7.5 6.5a2.5 2.5 0 1 1-.01 0M16.5 17.5a2.5 2.5 0 1 1-.01 0"/>
+      </symbol>
+      <!-- misc -->
+      <symbol id="i-cash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/>
+      </symbol>
+      <symbol id="i-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 14.5h4"/>
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h14M10 6l-6 6 6 6"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9.5 16.5H2.5z"/><path d="M12 9.5v4.5M12 17.5h.01"/></symbol>
+      <symbol id="i-back-del" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6H9l-5 6 5 6h11a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1z"/><path d="M15 9.5l-4 5M11 9.5l4 5"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7H7l1.2-2h7.6L17 7h2.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.2"/></symbol>
+      <symbol id="i-empty" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 10h11v4a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M16 11h2.5a2.5 2.5 0 0 1 0 5H16"/><path d="M4 22h15"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- ============ PIN LOCK ============ -->
+  <section class="lock" id="lock">
+    <div class="lock-card">
+      <img class="lock-logo" src="assets/logo-light.png" alt="Khamra" />
+      <div class="lock-tagline" id="lockTagline">Specialty Tea</div>
+      <div class="lock-title" id="lockTitle">Enter your PIN</div>
+      <div class="pin-dots" id="pinDots"></div>
+      <div class="keypad" id="keypad"></div>
+      <div class="lock-err" id="lockErr"></div>
+      <div class="fl-sign" id="lockSign"></div>
+    </div>
+  </section>
+
+  <!-- ============ APP ============ -->
+  <div class="app" id="app">
+    <nav class="nav">
+      <div class="nav-logo"><img src="assets/logo-light.png" alt="Khamra" /></div>
+      <button class="nav-btn active" data-route="sale"><svg><use href="#i-pos"/></svg><span data-t="navSale"></span></button>
+      <button class="nav-btn" data-route="reports"><svg><use href="#i-reports"/></svg><span data-t="navReports"></span></button>
+      <button class="nav-btn" data-route="settings"><svg><use href="#i-settings"/></svg><span data-t="navSettings"></span></button>
+      <div class="nav-spacer"></div>
+      <button class="nav-btn lock-btn" id="lockBtn"><svg><use href="#i-lock"/></svg><span data-t="lock"></span></button>
+    </nav>
+
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle"></h1>
+          <div class="sub" id="pageSub"></div>
+        </div>
+        <div class="topbar-right">
+          <div class="clock"><div class="t" id="clockT"></div><div class="d" id="clockD"></div></div>
+          <div class="lang-toggle">
+            <button id="langAr" data-lang="ar">ع</button>
+            <button id="langEn" data-lang="en">EN</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- SALE PAGE -->
+      <section class="page" id="page-sale">
+        <div class="pos">
+          <div class="pos-left">
+            <div class="cat-tabs" id="catTabs"></div>
+            <div class="pos-products"><div class="grid" id="productGrid"></div></div>
+            <div class="fl-sign main-sign" id="mainSign"></div>
+          </div>
+          <aside class="order">
+            <div class="order-head">
+              <h2 data-t="currentOrder"></h2>
+              <span class="head-total" id="headTotal"></span>
+              <button class="clear-link hidden" id="clearOrderBtn" data-t="clearOrder"></button>
+            </div>
+            <div class="order-items" id="orderItems"></div>
+            <div class="order-foot">
+              <div class="tot-row grand">
+                <span class="lbl" data-t="total"></span>
+                <span class="val" id="grandTotal"></span>
+              </div>
+              <button class="btn-charge" id="chargeBtn" disabled>
+                <span data-t="charge"></span> · <span class="amt" id="chargeAmt"></span>
+              </button>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- REPORTS PAGE -->
+      <section class="page scroll hidden" id="page-reports"></section>
+
+      <!-- SETTINGS PAGE -->
+      <section class="page scroll hidden" id="page-settings"></section>
+    </div>
+  </div>
+
+  <!-- ============ MODAL ============ -->
+  <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+
+  <!-- ============ TOAST ============ -->
+  <div class="toast" id="toast"><svg><use href="#i-check"/></svg><span id="toastMsg"></span></div>
+
+  <script src="js/data.js?v=4"></script>
+  <script src="js/app.js?v=4"></script>
+  <script>
+    /* Register the service worker so the app works fully offline once installed.
+       Only runs in a secure context (https / localhost); harmless elsewhere. */
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+  </script>
+</body>
+</html>

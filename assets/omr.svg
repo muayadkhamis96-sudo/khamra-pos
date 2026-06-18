@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 576" fill="#000" fill-rule="evenodd">
+  <!-- two slanted bars -->
+  <path d="M95 415 L215 300 L1015 300 L895 415 Z"/>
+  <path d="M30 565 L150 450 L950 450 L830 565 Z"/>
+  <!-- tall top hook (horn) with elongated teardrop hole -->
+  <path d="M384 300
+           C368 188 396 52 474 24
+           C522 4 596 14 622 64
+           C652 116 640 184 604 222
+           C578 258 598 280 616 300 Z
+           M470 292
+           C452 196 486 100 532 96
+           C578 92 596 150 574 206
+           C554 254 512 290 470 292 Z"/>
+</svg>
