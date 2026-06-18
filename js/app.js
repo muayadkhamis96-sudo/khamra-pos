@@ -16,6 +16,7 @@
     scope: 'today'         // reports scope: 'today' | 'all'
   };
   var pinBuffer = '';
+  var PIN_LEN = 6;   // PIN length (digits)
 
   var $  = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
@@ -87,20 +88,20 @@
     pad.onclick = function (e) {
       var b = e.target.closest('.key'); if (!b) return;
       if (b.classList.contains('back')) { pinBuffer = pinBuffer.slice(0, -1); }
-      else if (b.dataset.k != null) { if (pinBuffer.length < 4) pinBuffer += b.dataset.k; }
+      else if (b.dataset.k != null) { if (pinBuffer.length < PIN_LEN) pinBuffer += b.dataset.k; }
       renderDots();
-      if (pinBuffer.length === 4) setTimeout(tryUnlock, 120);
+      if (pinBuffer.length === PIN_LEN) setTimeout(tryUnlock, 120);
     };
     // physical keyboard support
     document.addEventListener('keydown', function (e) {
       if (!$('#lock') || $('#lock').classList.contains('hidden')) return;
-      if (/^[0-9]$/.test(e.key)) { if (pinBuffer.length < 4) pinBuffer += e.key; renderDots(); if (pinBuffer.length === 4) setTimeout(tryUnlock, 120); }
+      if (/^[0-9]$/.test(e.key)) { if (pinBuffer.length < PIN_LEN) pinBuffer += e.key; renderDots(); if (pinBuffer.length === PIN_LEN) setTimeout(tryUnlock, 120); }
       else if (e.key === 'Backspace') { pinBuffer = pinBuffer.slice(0, -1); renderDots(); }
     });
   }
   function renderDots() {
     var dots = $('#pinDots'); dots.innerHTML = '';
-    for (var i = 0; i < 4; i++) { var d = el('span', 'pin-dot' + (i < pinBuffer.length ? ' on' : '')); dots.appendChild(d); }
+    for (var i = 0; i < PIN_LEN; i++) { var d = el('span', 'pin-dot' + (i < pinBuffer.length ? ' on' : '')); dots.appendChild(d); }
   }
   function tryUnlock() {
     if (D.verifyPin(pinBuffer)) { pinBuffer = ''; renderDots(); $('#lockErr').textContent = ''; unlock(); }
@@ -431,9 +432,9 @@
     // Security / PIN
     html += '<div class="set-card"><h3>' + t('security') + '</h3><p class="hint">' + t('changePin') + '</p>' +
       '<div class="row3">' +
-        '<div class="field"><label>' + t('currentPin') + '</label><input id="curPin" type="password" inputmode="numeric" maxlength="4" /></div>' +
-        '<div class="field"><label>' + t('newPin') + '</label><input id="newPin" type="password" inputmode="numeric" maxlength="4" /></div>' +
-        '<div class="field"><label>' + t('confirmPin') + '</label><input id="confPin" type="password" inputmode="numeric" maxlength="4" /></div>' +
+        '<div class="field"><label>' + t('currentPin') + '</label><input id="curPin" type="password" inputmode="numeric" maxlength="6" /></div>' +
+        '<div class="field"><label>' + t('newPin') + '</label><input id="newPin" type="password" inputmode="numeric" maxlength="6" /></div>' +
+        '<div class="field"><label>' + t('confirmPin') + '</label><input id="confPin" type="password" inputmode="numeric" maxlength="6" /></div>' +
       '</div>' +
       '<button class="btn btn-primary" id="savePin">' + t('save') + '</button></div>';
 
@@ -534,7 +535,7 @@
   function saveNewPin() {
     var cur = $('#curPin').value, nw = $('#newPin').value, cf = $('#confPin').value;
     if (!D.verifyPin(cur)) { toast(t('wrongPin'), true); return; }
-    if (!/^\d{4}$/.test(nw)) { toast(t('pinLen'), true); return; }
+    if (!/^\d{6}$/.test(nw)) { toast(t('pinLen'), true); return; }
     if (nw !== cf) { toast(t('pinMismatch'), true); return; }
     D.setPin(nw); toast(t('pinChanged'));
     $('#curPin').value = $('#newPin').value = $('#confPin').value = '';

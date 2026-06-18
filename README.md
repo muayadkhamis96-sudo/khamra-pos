@@ -41,7 +41,7 @@ on one orientation, lock rotation in iPad Control Center.
 
 A PIN gate protects the till.
 
-- **Default PIN: `1234`**
+- **Default PIN: `123456`** (6 digits)
 - Change it any time in **Settings → Security**. (The app warns you while the
   default PIN is still in use.)
 

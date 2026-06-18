@@ -12,7 +12,8 @@
     menu: 'khamra.menu',
     sales: 'khamra.sales',
     settings: 'khamra.settings',
-    seq: 'khamra.orderSeq'
+    seq: 'khamra.orderSeq',
+    pinV: 'khamra.pinVersion'
   };
 
   // --- Default menu (from the booth menu, bilingual) --------------------
@@ -37,7 +38,8 @@
     boothName: 'Khamra'
   };
 
-  var DEFAULT_PIN = '1234';
+  var DEFAULT_PIN = '123456';
+  var PIN_VERSION = '6'; // bump if the PIN scheme changes (forces a one-time reset)
 
   // --- Low level read/write --------------------------------------------
   function read(key, fallback) {
@@ -273,7 +275,7 @@
     save:           { ar: 'حفظ', en: 'Save' },
     pinChanged:     { ar: 'تم تغيير الرمز', en: 'PIN updated' },
     pinMismatch:    { ar: 'الرمزان غير متطابقين', en: 'PINs do not match' },
-    pinLen:         { ar: 'الرمز ٤ أرقام', en: 'PIN must be 4 digits' },
+    pinLen:         { ar: 'الرمز ٦ أرقام', en: 'PIN must be 6 digits' },
     menuMgmt:       { ar: 'إدارة المنيو', en: 'Menu' },
     addItem:        { ar: 'إضافة صنف', en: 'Add item' },
     deleteItem:     { ar: 'حذف الصنف', en: 'Delete item' },
@@ -292,7 +294,7 @@
     backup:         { ar: 'نسخة احتياطية (JSON)', en: 'Backup (JSON)' },
     clearData:      { ar: 'مسح كل المبيعات', en: 'Clear all sales' },
     clearConfirm:   { ar: 'سيتم حذف كل سجل المبيعات نهائياً. متابعة؟', en: 'This will permanently delete all sales history. Continue?' },
-    defaultPinWarn: { ar: 'أنت تستخدم الرمز الافتراضي 1234 — يُنصح بتغييره.', en: 'You are using the default PIN 1234 — please change it.' },
+    defaultPinWarn: { ar: 'أنت تستخدم الرمز الافتراضي 123456 — يُنصح بتغييره.', en: 'You are using the default PIN 123456 — please change it.' },
     saved:          { ar: 'تم الحفظ', en: 'Saved' },
     deleteSale:     { ar: 'حذف', en: 'Delete' }
   };
@@ -347,6 +349,16 @@
       sales: getSales()
     }, null, 2);
   }
+
+  // --- Migration --------------------------------------------------------
+  // When the PIN scheme changes (e.g. 4-digit → 6-digit), reset the stored PIN
+  // to the new default once, so an old incompatible PIN can't lock anyone out.
+  (function () {
+    if (read(KEYS.pinV, null) !== PIN_VERSION) {
+      write(KEYS.pin, hashPin(DEFAULT_PIN));
+      write(KEYS.pinV, PIN_VERSION);
+    }
+  })();
 
   // --- Public API -------------------------------------------------------
   global.Data = {
