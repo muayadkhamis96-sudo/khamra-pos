@@ -2,15 +2,15 @@
    Precaches the app on install, then serves cache-first so it works fully
    offline. Anything fetched while online (incl. Google Fonts) is cached too.
    Bump CACHE when you change app files to force the iPad to pull the update. */
-var CACHE = 'khamra-v5';
+var CACHE = 'khamra-v6';
 
 var CORE = [
   './',
   'index.html',
   'manifest.json',
-  'css/styles.css?v=5',
-  'js/data.js?v=5',
-  'js/app.js?v=5',
+  'css/styles.css?v=6',
+  'js/data.js?v=6',
+  'js/app.js?v=6',
   'assets/logo.png',
   'assets/logo-light.png',
   'assets/icon-180.png',
@@ -48,20 +48,38 @@ self.addEventListener('activate', function (e) {
   );
 });
 
+// App shell (HTML/CSS/JS/JSON) = network-first so updates load when online;
+// everything else (images/fonts/svg) = cache-first for speed. Both fall back
+// to cache when offline, so the app keeps working with no connection.
+function isShell(req) {
+  if (req.mode === 'navigate') return true;
+  return /\.(?:html|js|css|json)(?:\?|$)/.test(req.url);
+}
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then(function (cached) {
-      if (cached) return cached;
-      return fetch(e.request).then(function (resp) {
-        if (resp && (resp.ok || resp.type === 'opaque')) {
-          var copy = resp.clone();
-          caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
-        }
+  var req = e.request;
+
+  if (isShell(req)) {
+    e.respondWith(
+      fetch(req).then(function (resp) {
+        if (resp && resp.ok) { var copy = resp.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
         return resp;
       }).catch(function () {
-        // offline and not cached → fall back to the app shell for navigations
-        if (e.request.mode === 'navigate') return caches.match('index.html');
+        return caches.match(req).then(function (c) { return c || caches.match('index.html'); });
+      })
+    );
+    return;
+  }
+
+  e.respondWith(
+    caches.match(req).then(function (cached) {
+      if (cached) return cached;
+      return fetch(req).then(function (resp) {
+        if (resp && (resp.ok || resp.type === 'opaque')) {
+          var copy = resp.clone();
+          caches.open(CACHE).then(function (c) { c.put(req, copy); });
+        }
+        return resp;
       });
     })
   );
