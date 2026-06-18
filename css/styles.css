@@ -660,11 +660,18 @@ button, .card-product, .nav-btn, .cat-tab, .key, .pay-opt,
 }
 
 @supports not (inset: 0) {
-  /* logical inset positioning unsupported → physical (UI is RTL by default) */
+  /* logical inset positioning unsupported → physical. Default = RTL mapping,
+     with [dir="ltr"] overrides. (inline-end → RTL:left/LTR:right;
+     inline-start → RTL:right/LTR:left) */
   .badge-qty { right: auto; left: 12px; }
-  .photo-rm { right: auto; left: 2px; }
-  .medit-photo .mi-add { right: auto; left: 2px; }
+  .stat .ico { right: auto; left: 16px; }
+  .photo-rm  { right: auto; left: 2px; }
+  .medit-photo .mi-add { left: auto; right: 2px; }
   .order { right: 0; }
+  [dir="ltr"] .badge-qty { left: auto; right: 12px; }
+  [dir="ltr"] .stat .ico { left: auto; right: 16px; }
+  [dir="ltr"] .photo-rm  { left: auto; right: 2px; }
+  [dir="ltr"] .medit-photo .mi-add { right: auto; left: 2px; }
 
   /* flexbox `gap` unsupported → emulate with margins on later children */
   .pin-dots > * + *,

@@ -171,8 +171,19 @@
           '<div class="name-ar">' + p.ar + '</div>' +
           '<div class="price">' + D.money(p.price, state.lang) + cur() + '</div>' +
         '</div>';
+      card.dataset.id = p.id;
       card.onclick = function () { addToCart(p); };
       grid.appendChild(card);
+    });
+  }
+  // Lightweight in-place update of the cart badges — avoids rebuilding the whole
+  // product grid (and re-loading all photos) on every tap, which lags old iPads.
+  function updateCardBadges() {
+    $$('#productGrid .card-product').forEach(function (card) {
+      var e = state.cart.get(card.dataset.id);
+      card.classList.toggle('in-cart', !!e);
+      var b = card.querySelector('.badge-qty');
+      if (b) b.textContent = e ? D.num(e.qty, state.lang) : '';
     });
   }
   function curLabel() { return state.lang === 'ar' ? 'ر.ع' : 'OMR'; }
@@ -192,16 +203,16 @@
   function addToCart(p) {
     var e = state.cart.get(p.id);
     if (e) e.qty += 1; else state.cart.set(p.id, { p: p, qty: 1 });
-    renderProducts(); renderCart();
+    updateCardBadges(); renderCart();
     if (isCompact()) openSheet(true);   // reveal the order on small screens
   }
   function changeQty(id, delta) {
     var e = state.cart.get(id); if (!e) return;
     e.qty += delta;
     if (e.qty <= 0) state.cart.delete(id);
-    renderProducts(); renderCart();
+    updateCardBadges(); renderCart();
   }
-  function clearCart() { state.cart.clear(); renderProducts(); renderCart(); openSheet(false); }
+  function clearCart() { state.cart.clear(); updateCardBadges(); renderCart(); openSheet(false); }
 
   function cartTotal() {
     var sum = 0; state.cart.forEach(function (e) { sum += e.p.price * e.qty; }); return sum;
