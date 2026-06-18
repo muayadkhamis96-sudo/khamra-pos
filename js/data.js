@@ -280,6 +280,7 @@
     addItem:        { ar: 'إضافة صنف', en: 'Add item' },
     deleteItem:     { ar: 'حذف الصنف', en: 'Delete item' },
     deleteItemConfirm: { ar: 'حذف هذا الصنف؟', en: 'Delete this item?' },
+    fillAll:        { ar: 'يرجى تعبئة الاسم والسعر لكل صنف', en: 'Please fill in the name and price for every item' },
     resetMenuConfirm:  { ar: 'استعادة المنيو الأصلي وحذف أي أصناف مضافة؟', en: 'Reset to the original menu and remove any added items?' },
     photo:          { ar: 'صورة', en: 'Photo' },
     addPhoto:       { ar: 'إضافة صورة', en: 'Add photo' },

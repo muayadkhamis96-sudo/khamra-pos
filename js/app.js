@@ -160,7 +160,10 @@
   }
   function renderProducts() {
     var grid = $('#productGrid'); grid.innerHTML = '';
-    var menu = D.getMenu().filter(function (p) { return state.cat === 'all' || p.category === state.cat; });
+    var menu = D.getMenu().filter(function (p) {
+      var complete = p.ar && String(p.ar).trim() && p.price > 0;   // hide half-added items
+      return complete && (state.cat === 'all' || p.category === state.cat);
+    });
     menu.forEach(function (p) {
       var inCart = state.cart.get(p.id);
       var card = el('button', 'card-product ' + p.category + (inCart ? ' in-cart' : '') + (p.photo ? ' has-photo' : ''));
@@ -566,6 +569,15 @@
     return menu;
   }
   function saveMenuEdits() {
+    // Every item must have a name and a price > 0 before it can be saved.
+    var bad = 0;
+    $$('#menuEdit .medit-row').forEach(function (row) {
+      var ar = $('[data-f="ar"]', row), pr = $('[data-f="price"]', row);
+      ar.classList.remove('invalid'); pr.classList.remove('invalid');
+      if (!ar.value.trim()) { ar.classList.add('invalid'); bad++; }
+      if (!(parseFloat(pr.value) > 0)) { pr.classList.add('invalid'); bad++; }
+    });
+    if (bad) { toast(t('fillAll')); return; }
     D.saveMenu(collectMenuEdits()); toast(t('saved'));
     renderProducts();
   }
