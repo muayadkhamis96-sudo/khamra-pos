@@ -223,7 +223,7 @@ input { font-family: inherit; }
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
 }
 .card-product {
-  position: relative; text-align: start;
+  position: relative; text-align: start; cursor: pointer;
   background: var(--paper); border: 1px solid var(--line); border-radius: var(--r);
   min-height: 150px;
   display: flex; flex-direction: column;

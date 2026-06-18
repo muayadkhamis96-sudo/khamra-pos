@@ -165,7 +165,12 @@
     });
     menu.forEach(function (p) {
       var inCart = state.cart.get(p.id);
-      var card = el('button', 'card-product ' + p.category + (inCart ? ' in-cart' : '') + (p.photo ? ' has-photo' : ''));
+      // Must be a <div>, not a <button>: iOS 12 Safari won't render the
+      // absolutely-positioned photo inside a <button>. role/tabindex keep it
+      // accessible and tappable.
+      var card = el('div', 'card-product ' + p.category + (inCart ? ' in-cart' : '') + (p.photo ? ' has-photo' : ''));
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
       card.innerHTML =
         '<span class="badge-qty">' + (inCart ? D.num(inCart.qty, state.lang) : '') + '</span>' +
         thumbHTML(p) +
@@ -175,6 +180,7 @@
         '</div>';
       card.dataset.id = p.id;
       card.onclick = function () { addToCart(p); };
+      card.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addToCart(p); } };
       grid.appendChild(card);
     });
   }
