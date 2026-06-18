@@ -1,58 +1,63 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Photo diagnostic</title>
+<title>Photo diagnostic 2</title>
 <style>
   body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; padding: 14px; background: #f4ead9; color: #3a2415; }
   .ua { font-size: 11px; word-break: break-all; background: #fff; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
   .status { font-weight: bold; margin: 10px 0; font-size: 14px; }
-  h2 { font-size: 15px; margin: 16px 0 6px; }
-  .box { width: 220px; height: 150px; border: 2px solid #5a3114; background: #fff; overflow: hidden; position: relative; }
-  .cover { width: 100%; height: 100%; object-fit: cover; }
-  .contain { width: 100%; height: 100%; object-fit: contain; }
-  .wauto { width: 100%; height: auto; display: block; }
-  .bg { background-size: cover; background-position: center; background-repeat: no-repeat; }
-  /* F: exact replica of the app's product thumb */
-  .thumbF { display: grid; place-items: center; }
-  .thumbF .ph { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+  h2 { font-size: 14px; margin: 18px 0 6px; }
+
+  /* A — does the image load at all */
+  .boxA { width: 220px; height: 150px; border: 2px solid #5a3114; background: #fff; overflow: hidden; }
+  .boxA img { width: 100%; height: auto; display: block; }
+
+  /* F — app technique, but container has an EXPLICIT pixel width (worked before) */
+  .boxF { width: 220px; height: 150px; border: 2px solid #2e7d32; background: #fff; overflow: hidden; position: relative; display: grid; place-items: center; }
+  .boxF .ph { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+
+  /* G — REPRODUCE the real app: width comes from grid + flex column (suspect) */
+  .gridG { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+  .cardG { display: flex; flex-direction: column; border: 2px solid #b4503f; overflow: hidden; background: #fff; }
+  .thumbG { height: 150px; flex: none; position: relative; overflow: hidden; display: grid; place-items: center; background: #fff; }
+  .thumbG .ph { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+  .cardG .lbl { padding: 8px; font-size: 13px; }
+
+  /* H — THE FIX: same grid+flex layout, but image uses insets only (no width/height) */
+  .gridH { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+  .cardH { display: flex; flex-direction: column; border: 2px solid #1565c0; overflow: hidden; background: #fff; }
+  .thumbH { height: 150px; width: 100%; flex: none; position: relative; overflow: hidden; background: #fff; }
+  .thumbH .ph { position: absolute; top: 0; right: 0; bottom: 0; left: 0; object-fit: cover; }
+  .cardH .lbl { padding: 8px; font-size: 13px; }
 </style>
 </head>
 <body>
   <div class="ua" id="ua"></div>
   <div class="status" id="status">Loading…</div>
 
-  <h2>A — plain &lt;img&gt; (does the photo load at all?)</h2>
-  <div class="box"><img class="wauto" id="imgA" alt=""></div>
+  <h2>A — does the photo load? (plain image)</h2>
+  <div class="boxA"><img id="imgA" alt=""></div>
 
-  <h2>B — &lt;img&gt; object-fit: cover</h2>
-  <div class="box"><img class="cover" id="imgB" alt=""></div>
+  <h2>F — fixed-width box (green) — this WORKED in the last test</h2>
+  <div class="boxF"><img class="ph" id="imgF" alt=""></div>
 
-  <h2>C — &lt;img&gt; object-fit: contain</h2>
-  <div class="box"><img class="contain" id="imgC" alt=""></div>
+  <h2>G — RED box: same as the real app (width from grid+flex)</h2>
+  <div class="gridG"><div class="cardG"><div class="thumbG"><img class="ph" id="imgG" alt=""></div><div class="lbl">G card</div></div></div>
 
-  <h2>D — &lt;img&gt; width:100% height:auto (no object-fit)</h2>
-  <div class="box"><img class="wauto" id="imgD" alt=""></div>
-
-  <h2>E — CSS background-image: cover</h2>
-  <div class="box bg" id="boxE"></div>
-
-  <h2>F — exact copy of the app's card photo</h2>
-  <div class="box thumbF"><img class="ph" id="imgF" alt=""></div>
+  <h2>H — BLUE box: the proposed FIX (grid+flex, image insets only)</h2>
+  <div class="gridH"><div class="cardH"><div class="thumbH"><img class="ph" id="imgH" alt=""></div><div class="lbl">H card</div></div></div>
 
   <script>
     document.getElementById('ua').textContent = navigator.userAgent;
     var src = 'assets/products/karak.jpg?nocache=' + (new Date().getTime());
-    var ids = ['imgA','imgB','imgC','imgD','imgF'];
-    var errors = 0, done = 0;
-    ids.forEach(function (id) {
+    ['imgA','imgF','imgG','imgH'].forEach(function (id) {
       var im = document.getElementById(id);
-      im.onload = function () { done++; if (id === 'imgA') document.getElementById('status').textContent = 'A loaded OK — ' + im.naturalWidth + 'x' + im.naturalHeight; };
-      im.onerror = function () { errors++; im.parentNode.style.background = '#ffd5d5'; document.getElementById('status').textContent = 'IMAGE FAILED TO LOAD (error)'; };
+      im.onload = function () { if (id === 'imgA') document.getElementById('status').textContent = 'Image loaded OK — ' + im.naturalWidth + 'x' + im.naturalHeight; };
+      im.onerror = function () { document.getElementById('status').textContent = 'IMAGE FAILED TO LOAD'; };
       im.src = src;
     });
-    document.getElementById('boxE').style.backgroundImage = "url('" + src + "')";
   </script>
 </body>
 </html>
