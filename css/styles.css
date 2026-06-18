@@ -234,12 +234,12 @@ input { font-family: inherit; }
 .card-product:active { transform: translateY(-1px) scale(.99); }
 /* thumb area — photo if present, otherwise a themed icon tile */
 .card-product .thumb {
-  height: 168px; flex: none; position: relative; overflow: hidden;
+  height: 220px; flex: none; position: relative; overflow: hidden;
   display: grid; place-items: center;
-  background: radial-gradient(120% 100% at 50% 0, var(--paper-2), #f3e8d6);
+  background: #ffffff;   /* matches the photos' white background so it blends */
 }
-/* zoom into the centered product so the white studio margins are cropped out */
-.card-product .thumb .ph { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; transform: scale(1.6); transform-origin: center; }
+/* photos are pre-cropped tight to the product; contain shows the whole product */
+.card-product .thumb .ph { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; padding: 8px; }
 .card-product .thumb .icn-fallback { display: grid; place-items: center; color: var(--brown); }
 .card-product.sweets .thumb .icn-fallback { color: var(--caramel-600); }
 .card-product .thumb .icn-fallback svg { width: 40px; height: 40px; opacity: .85; }
@@ -646,7 +646,7 @@ button, .card-product, .nav-btn, .cat-tab, .key, .pay-opt,
   .topbar { padding-top: calc(14px + env(safe-area-inset-top)); padding-bottom: 10px; }
   .topbar h1 { font-size: 23px; }
   .cat-tabs { padding-bottom: 12px; }
-  .card-product .thumb { height: 134px; }
+  .card-product .thumb { height: 200px; }
 }
 
 /* ============================================================
