@@ -130,7 +130,28 @@
     };
     sales.push(rec);
     write(KEYS.sales, sales);
+    // Inventory: decrement tracked sweets' stock by the quantity sold.
+    var menu = getMenu(), changed = false;
+    sale.items.forEach(function (it) {
+      var m = menu.filter(function (x) { return x.id === it.id; })[0];
+      if (m && m.category === 'sweets' && typeof m.stock === 'number') {
+        m.stock = Math.max(0, m.stock - it.qty); changed = true;
+      }
+    });
+    if (changed) saveMenu(menu);
     return rec;
+  }
+
+  // --- Inventory (sweets only) -----------------------------------------
+  // stock: a number = tracked remaining count; null/undefined = untracked (unlimited).
+  function setStock(id, val) {
+    var menu = getMenu();
+    var m = menu.filter(function (x) { return x.id === id; })[0];
+    if (!m) return getMenu();
+    if (val === null || val === '' || (typeof val === 'number' && isNaN(val))) m.stock = null;
+    else m.stock = Math.max(0, Math.floor(Number(val)) || 0);
+    saveMenu(menu);
+    return menu;
   }
 
   function deleteSale(id) {
@@ -224,7 +245,16 @@
     // Nav
     navSale:        { ar: 'نقطة البيع', en: 'Sale' },
     navReports:     { ar: 'التقارير', en: 'Reports' },
+    navInventory:   { ar: 'المخزون', en: 'Inventory' },
     navSettings:    { ar: 'الإعدادات', en: 'Settings' },
+    inventoryHint:  { ar: 'حدّد الكمية المتوفرة لكل صنف من السويتات. تنقص تلقائياً مع كل عملية بيع.', en: 'Set the available quantity for each sweet. It counts down automatically with each sale.' },
+    stockLeft:      { ar: 'متبقي', en: 'left' },
+    soldOut:        { ar: 'نفذت الكمية', en: 'Sold out' },
+    unlimited:      { ar: 'غير محدود', en: 'Unlimited' },
+    setUnlimited:   { ar: 'غير محدود', en: 'Unlimited' },
+    inStock:        { ar: 'متوفر', en: 'In stock' },
+    outOfStockToast:{ ar: 'نفذت كمية هذا الصنف', en: 'This item is sold out' },
+    noMoreStock:    { ar: 'لا تتوفر كمية إضافية', en: 'No more stock available' },
     lock:           { ar: 'قفل', en: 'Lock' },
     // Categories
     drinks:         { ar: 'المشروبات', en: 'Drinks' },
@@ -369,6 +399,8 @@
     verifyPin: verifyPin, setPin: setPin, isDefaultPin: isDefaultPin,
     // menu
     getMenu: getMenu, saveMenu: saveMenu, resetMenu: resetMenu,
+    // inventory
+    setStock: setStock,
     // settings
     getSettings: getSettings, saveSettings: saveSettings,
     // sales

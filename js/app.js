@@ -130,12 +130,13 @@
     $$('.nav-btn[data-route]').forEach(function (b) { b.classList.toggle('active', b.dataset.route === route); });
     $$('.page').forEach(function (p) { p.classList.add('hidden'); });
     $('#page-' + route).classList.remove('hidden');
-    var titles = { sale: 'navSale', reports: 'navReports', settings: 'navSettings' };
+    var titles = { sale: 'navSale', inventory: 'navInventory', reports: 'navReports', settings: 'navSettings' };
     $('#pageTitle').textContent = t(titles[route]);
     renderRoute();
   }
   function renderRoute() {
     if (state.route === 'sale') { renderCatTabs(); renderProducts(); $('#pageSub').textContent = D.t('tagline', state.lang); }
+    else if (state.route === 'inventory') renderInventory();
     else if (state.route === 'reports') renderReports();
     else if (state.route === 'settings') renderSettings();
   }
@@ -151,12 +152,6 @@
       tabs.appendChild(b);
     });
   }
-  // Photo fills the thumb via an <img> with object-fit:cover (works on the
-  // booth's old iOS Safari). Items without a photo show the themed icon.
-  function thumbHTML(p) {
-    if (p.photo) return '<div class="thumb photo"><img class="ph" src="' + p.photo + '" alt="" /></div>';
-    return '<div class="thumb"><span class="icn-fallback">' + icon(ICON_FOR[p.icon] || 'cup') + '</span></div>';
-  }
   function renderProducts() {
     var grid = $('#productGrid'); grid.innerHTML = '';
     var menu = D.getMenu().filter(function (p) {
@@ -165,24 +160,41 @@
     });
     menu.forEach(function (p) {
       var inCart = state.cart.get(p.id);
+      var tracked = (p.category === 'sweets' && typeof p.stock === 'number');
+      var soldOut = tracked && p.stock <= 0;
       // Must be a <div>, not a <button>: iOS 12 Safari won't render the
       // absolutely-positioned photo inside a <button>. role/tabindex keep it
       // accessible and tappable.
-      var card = el('div', 'card-product ' + p.category + (inCart ? ' in-cart' : '') + (p.photo ? ' has-photo' : ''));
+      var card = el('div', 'card-product ' + p.category + (inCart ? ' in-cart' : '') + (p.photo ? ' has-photo' : '') + (soldOut ? ' sold-out' : ''));
       card.setAttribute('role', 'button');
-      card.setAttribute('tabindex', '0');
+      card.setAttribute('tabindex', soldOut ? '-1' : '0');
+      // photo / icon
+      var inner = p.photo
+        ? '<img class="ph" src="' + p.photo + '" alt="" />'
+        : '<span class="icn-fallback">' + icon(ICON_FOR[p.icon] || 'cup') + '</span>';
+      // stock indicator (tracked sweets only)
+      if (tracked && !soldOut) inner += '<span class="stock-tag">' + stockLeftLabel(p.stock) + '</span>';
+      if (soldOut) inner += '<div class="soldout-ov"><span>' + t('soldOut') + '</span></div>';
       card.innerHTML =
         '<span class="badge-qty">' + (inCart ? D.num(inCart.qty, state.lang) : '') + '</span>' +
-        thumbHTML(p) +
+        '<div class="thumb' + (p.photo ? ' photo' : '') + '">' + inner + '</div>' +
         '<div class="meta">' +
           '<div class="name-ar">' + p.ar + '</div>' +
           '<div class="price">' + D.money(p.price, state.lang) + cur() + '</div>' +
         '</div>';
       card.dataset.id = p.id;
-      card.onclick = function () { addToCart(p); };
-      card.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addToCart(p); } };
+      if (!soldOut) {
+        card.onclick = function () { addToCart(p); };
+        card.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addToCart(p); } };
+      }
       grid.appendChild(card);
     });
+  }
+  // "متبقي ٥" / "5 left" — label order follows the language.
+  function stockLeftLabel(n) {
+    return state.lang === 'ar'
+      ? (t('stockLeft') + ' ' + D.num(n, state.lang))
+      : (D.num(n, state.lang) + ' ' + t('stockLeft'));
   }
   // Lightweight in-place update of the cart badges — avoids rebuilding the whole
   // product grid (and re-loading all photos) on every tap, which lags old iPads.
@@ -208,14 +220,23 @@
   function isCompact() { return window.matchMedia('(max-width: 860px)').matches; }
   function openSheet(open) { var o = $('.order'); if (o) o.classList.toggle('open', open !== false); }
 
+  // For a tracked sweet, you can't add more than the remaining stock.
+  function stockCap(id) {
+    var m = menuItem(id);
+    return (m && m.category === 'sweets' && typeof m.stock === 'number') ? m.stock : Infinity;
+  }
   function addToCart(p) {
     var e = state.cart.get(p.id);
+    var cap = stockCap(p.id);
+    if (cap <= 0) { toast(t('outOfStockToast')); return; }
+    if ((e ? e.qty : 0) >= cap) { toast(t('noMoreStock')); return; }
     if (e) e.qty += 1; else state.cart.set(p.id, { p: p, qty: 1 });
     updateCardBadges(); renderCart();
     if (isCompact()) openSheet(true);   // reveal the order on small screens
   }
   function changeQty(id, delta) {
     var e = state.cart.get(id); if (!e) return;
+    if (delta > 0 && e.qty >= stockCap(id)) { toast(t('noMoreStock')); return; }
     e.qty += delta;
     if (e.qty <= 0) state.cart.delete(id);
     updateCardBadges(); renderCart();
@@ -275,6 +296,7 @@
     var rec = D.recordSale({ items: items, total: cartTotal(), method: method });
     showSuccess(rec);
     clearCart();
+    renderProducts();   // reflect decremented sweet stock / sold-out
   }
   function showSuccess(rec) {
     openModal(
@@ -286,6 +308,65 @@
     $('#newOrderBtn').onclick = closeModal;
     setTimeout(function () { if ($('#modalBg').classList.contains('on')) closeModal(); }, 2600);
   }
+
+  // =====================================================================
+  // INVENTORY (sweets only)
+  // =====================================================================
+  function renderInventory() {
+    var page = $('#page-inventory');
+    $('#pageSub').textContent = t('sweets');
+    var sweets = D.getMenu().filter(function (p) {
+      return p.category === 'sweets' && p.ar && String(p.ar).trim() && p.price > 0;
+    });
+    var html = '<div class="settings-wrap">';
+    html += '<div class="inv-note">' + icon('box') + '<span>' + t('inventoryHint') + '</span></div>';
+    html += '<div class="inv-list">';
+    sweets.forEach(function (p) {
+      var tracked = typeof p.stock === 'number';
+      var status = !tracked
+        ? '<span class="inv-status unl">' + t('unlimited') + '</span>'
+        : (p.stock <= 0
+            ? '<span class="inv-status out">' + t('soldOut') + '</span>'
+            : '<span class="inv-status ok">' + t('inStock') + ': ' + D.num(p.stock, state.lang) + '</span>');
+      var thumb = p.photo
+        ? '<span class="inv-thumb"><img src="' + p.photo + '" alt="" /></span>'
+        : '<span class="inv-thumb fallback">' + icon(ICON_FOR[p.icon] || 'cup') + '</span>';
+      html += '<div class="inv-row" data-id="' + p.id + '">' +
+        thumb +
+        '<div class="inv-info"><div class="a">' + p.ar + '</div><div class="b">' + p.en + '</div>' + status + '</div>' +
+        '<div class="inv-ctrl">' +
+          '<button class="inv-btn" data-d="-1" aria-label="minus">−</button>' +
+          '<input class="inv-num" type="number" inputmode="numeric" min="0" step="1" value="' + (tracked ? p.stock : '') + '" placeholder="∞" />' +
+          '<button class="inv-btn" data-d="1" aria-label="plus">+</button>' +
+          '<button class="inv-unl btn btn-ghost">' + t('setUnlimited') + '</button>' +
+        '</div>' +
+      '</div>';
+    });
+    if (!sweets.length) html += '<div class="empty-state"><svg><use href="#i-box"/></svg><div>' + t('noSales') + '</div></div>';
+    html += '</div></div>';
+    page.innerHTML = html;
+
+    $$('.inv-row', page).forEach(function (row) {
+      var id = row.dataset.id;
+      var input = $('.inv-num', row);
+      input.onchange = function () {
+        var v = input.value.trim();
+        D.setStock(id, v === '' ? null : parseInt(v, 10));
+        afterStockChange();
+      };
+      $$('.inv-btn', row).forEach(function (b) {
+        b.onclick = function () {
+          var m = menuItem(id);
+          var curv = (m && typeof m.stock === 'number') ? m.stock : 0;
+          D.setStock(id, Math.max(0, curv + (+b.dataset.d)));
+          afterStockChange();
+        };
+      });
+      $('.inv-unl', row).onclick = function () { D.setStock(id, null); afterStockChange(); };
+    });
+  }
+  // Re-render inventory + the sale grid so stock changes reflect immediately on the POS.
+  function afterStockChange() { renderInventory(); renderProducts(); }
 
   // =====================================================================
   // REPORTS
