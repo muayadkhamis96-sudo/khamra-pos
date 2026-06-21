@@ -354,7 +354,8 @@ input { font-family: inherit; }
 
 /* Bar chart (last 7 days) */
 .chart { display: flex; align-items: flex-end; gap: 12px; height: 180px; padding-top: 8px; }
-.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: flex-end; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: flex-end; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border-radius: 8px; padding-top: 2px; }
+.bar-col:hover .bar { filter: brightness(1.05); }
 .bar-wrap { width: 100%; flex: 1; display: flex; align-items: flex-end; justify-content: center; }
 .bar {
   width: 60%; max-width: 38px; border-radius: 8px 8px 4px 4px;
@@ -363,9 +364,12 @@ input { font-family: inherit; }
   position: relative;
 }
 .bar.today { background: linear-gradient(180deg, var(--brown-500), var(--brown)); }
+/* the day currently being viewed */
+.bar.selected { background: linear-gradient(180deg, var(--caramel), var(--caramel-600)); box-shadow: 0 0 0 3px var(--gold); }
 .bar .bv { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 800; color: var(--ink-soft); white-space: nowrap; }
 .bar-col .bd { font-size: 11px; color: var(--muted); font-weight: 600; }
 .bar-col.today .bd { color: var(--brown); font-weight: 800; }
+.bar-col.selected .bd { color: var(--caramel-600); font-weight: 800; }
 
 /* Best sellers list */
 .rank { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }

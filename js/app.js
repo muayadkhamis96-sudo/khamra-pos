@@ -371,10 +371,17 @@
   // =====================================================================
   // REPORTS
   // =====================================================================
+  // scope: 'today' | 'all' | a dayKey (YYYY-MM-DD) selected from the chart
+  function scopeKey() {
+    if (state.scope === 'all') return null;
+    return state.scope === 'today' ? D.dayKey() : state.scope;
+  }
   function renderReports() {
     var page = $('#page-reports');
-    var s = state.scope === 'today' ? D.statsForDay() : D.allTime();
-    $('#pageSub').textContent = state.scope === 'today' ? todayLabel() : t('allTime');
+    var key = scopeKey();
+    var s = key ? D.statsForDay(key) : D.allTime();
+    $('#pageSub').textContent = state.scope === 'all' ? t('allTime')
+      : (state.scope === 'today' ? todayLabel() : dayLabel(key));
 
     var html = '';
     // scope toggle
@@ -406,6 +413,12 @@
 
     page.innerHTML = html;
     $$('[data-scope]', page).forEach(function (b) { b.onclick = function () { state.scope = b.dataset.scope; renderReports(); }; });
+    // tap a day in the chart to view that day's full report
+    $$('.bar-col[data-day]', page).forEach(function (b) {
+      var pick = function () { var k = b.dataset.day; state.scope = (k === D.dayKey()) ? 'today' : k; renderReports(); };
+      b.onclick = pick;
+      b.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+    });
     $$('.orow .del', page).forEach(function (b) {
       b.onclick = function () { D.deleteSale(b.dataset.id); renderReports(); toast(t('saved')); };
     });
@@ -421,17 +434,19 @@
     var days = D.lastDays(7);
     var max = Math.max.apply(null, days.map(function (d) { return d.revenue; }).concat([0.001]));
     var todayKey = D.dayKey();
+    var selKey = scopeKey();   // null when scope = all
     var bars = days.map(function (d) {
       var h = Math.max(4, Math.round(d.revenue / max * 140));
       var isToday = d.key === todayKey;
+      var isSel = d.key === selKey;
       var label = d.date.toLocaleDateString(state.lang === 'ar' ? 'ar' : 'en-GB', { weekday: 'short' });
       var val = d.revenue > 0 ? '<span class="bv">' + D.money(d.revenue, state.lang) + '</span>' : '';
-      return '<div class="bar-col ' + (isToday ? 'today' : '') + '">' +
-        '<div class="bar-wrap"><div class="bar ' + (isToday ? 'today' : '') + '" style="height:' + h + 'px">' + val + '</div></div>' +
+      return '<div class="bar-col' + (isToday ? ' today' : '') + (isSel ? ' selected' : '') + '" data-day="' + d.key + '" role="button" tabindex="0">' +
+        '<div class="bar-wrap"><div class="bar' + (isToday ? ' today' : '') + (isSel ? ' selected' : '') + '" style="height:' + h + 'px">' + val + '</div></div>' +
         '<div class="bd">' + label + '</div>' +
       '</div>';
     }).join('');
-    return '<div class="panel"><h3>' + t('last7') + '<span class="tag">' + cur() + '</span></h3><div class="chart">' + bars + '</div></div>';
+    return '<div class="panel"><h3>' + t('last7') + '<span class="tag">' + t('tapDayHint') + '</span></h3><div class="chart">' + bars + '</div></div>';
   }
   function sellersPanel(s) {
     if (!s.products.length) return panelEmpty(t('bestSellers'));
@@ -486,7 +501,9 @@
     return m ? (ICON_FOR[m.icon] || 'cup') : 'cup';
   }
   function recentPanel() {
-    var sales = D.getSales().slice().reverse().slice(0, 8);
+    var key = scopeKey();   // null when scope = all
+    var all = D.getSales().slice().reverse();
+    var sales = (key ? all.filter(function (s) { return s.day === key; }) : all).slice(0, 12);
     if (!sales.length) return panelEmpty(t('recentOrders'));
     var rows = sales.map(function (s) {
       var desc = s.items.map(function (i) { return (state.lang === 'ar' ? i.ar : i.en) + (i.qty > 1 ? '×' + D.num(i.qty, state.lang) : ''); }).join('، ');
@@ -507,6 +524,11 @@
   }
   function todayLabel() {
     return new Date().toLocaleDateString(state.lang === 'ar' ? 'ar' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  function dayLabel(key) {
+    var p = String(key).split('-');
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return d.toLocaleDateString(state.lang === 'ar' ? 'ar' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
   // =====================================================================

@@ -285,6 +285,7 @@
     noStandout:     { ar: 'لا يوجد منتج متصدّر بعد', en: 'No clear top seller yet' },
     tiedSales:      { ar: 'المبيعات متقاربة بين المنتجات', en: 'Sales are evenly matched so far' },
     last7:          { ar: 'آخر ٧ أيام', en: 'Last 7 days' },
+    tapDayHint:     { ar: 'اضغط على يوم', en: 'Tap a day' },
     bestSellers:    { ar: 'المنتجات الأكثر مبيعاً', en: 'Best sellers' },
     recentOrders:   { ar: 'أحدث الطلبات', en: 'Recent orders' },
     noSales:        { ar: 'لا توجد مبيعات بعد', en: 'No sales yet' },
