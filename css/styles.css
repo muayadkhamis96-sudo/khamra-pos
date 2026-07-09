@@ -521,6 +521,11 @@ input { font-family: inherit; }
 .exp-del { width: 34px; height: 42px; display: grid; place-items: center; color: var(--muted); border-radius: 8px; }
 .exp-del svg { width: 18px; height: 18px; }
 .exp-del:hover { color: var(--danger); background: rgba(180,80,63,0.10); }
+.cat-manage { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cat-manage-lbl { font-size: 13px; font-weight: 700; color: var(--muted); }
+.cat-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--paper-2); border: 1px solid var(--line-strong); border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 13px; font-weight: 700; color: var(--ink); }
+.cat-chip-del { width: 20px; height: 20px; border-radius: 50%; background: rgba(46,26,13,0.10); color: var(--ink-soft); font-size: 15px; line-height: 1; display: grid; place-items: center; font-weight: 700; }
+.cat-chip-del:hover { background: var(--danger); color: #fff; }
 
 /* ============================================================
    MODAL — payment / confirm

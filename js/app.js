@@ -587,12 +587,19 @@
         '<input type="date" data-f="day" value="' + e.day + '" />' +
         '<select data-f="category">' + catOptions(e.category) + '</select>' +
         '<input data-f="desc" value="' + escapeAttr(e.desc) + '" placeholder="' + t('expDesc') + '" />' +
-        '<input type="number" data-f="amount" inputmode="decimal" step="0.1" min="0" value="' + e.amount + '" />' +
+        '<input type="text" data-f="amount" inputmode="decimal" value="' + e.amount + '" />' +
         '<button class="exp-del" data-del="' + e.id + '" title="' + t('deleteItem') + '">' + icon('trash') + '</button>' +
       '</div>';
     });
-    html += '</div>' +
-      '<div class="btn-row" style="margin-top:16px">' +
+    html += '</div>';
+    // manage (delete) custom categories
+    var customs = D.getExpenseCats();
+    if (customs.length) {
+      html += '<div class="cat-manage"><span class="cat-manage-lbl">' + t('myCategories') + ':</span> ' +
+        customs.map(function (c) { return '<span class="cat-chip">' + escapeAttr(c) + '<button class="cat-chip-del" data-cat="' + escapeAttr(c) + '" aria-label="delete">×</button></span>'; }).join('') +
+      '</div>';
+    }
+    html += '<div class="btn-row" style="margin-top:16px">' +
         '<button class="btn btn-primary" id="addExpense">＋ ' + t('addExpenseBtn') + '</button>' +
         '<button class="btn btn-ghost" id="addExpCat">＋ ' + t('addCategoryBtn') + '</button>' +
         '<button class="btn btn-ghost" id="dlExcel">' + t('downloadExcel') + '</button>' +
@@ -612,6 +619,9 @@
     $('#addExpCat').onclick = function () {
       var name = prompt(t('newCatPrompt')); if (name && name.trim()) { D.addExpenseCat(name.trim()); renderExpenses(); toast(t('saved')); }
     };
+    $$('.cat-chip-del', page).forEach(function (b) {
+      b.onclick = function () { if (confirm(t('deleteCatConfirm'))) { D.deleteExpenseCat(b.dataset.cat); renderExpenses(); toast(t('saved')); } };
+    });
     $('#dlExcel').onclick = function () { download('khamra-expenses-' + (state.expMonth || 'all') + '.xls', expensesToExcel(mk), 'application/vnd.ms-excel'); };
     $$('#expList .exp-row').forEach(function (row) {
       var id = row.dataset.id;
@@ -692,7 +702,7 @@
         '<div class="medit-photo' + (p.photo ? ' has-photo' : '') + '" data-photo="' + idx + '" title="' + (p.photo ? t('changePhoto') : t('addPhoto')) + '">' + tile + '</div>' +
         '<input data-f="ar" value="' + escapeAttr(p.ar) + '" placeholder="' + t('name') + ' (ع)" />' +
         '<input data-f="en" value="' + escapeAttr(p.en) + '" placeholder="' + t('name') + ' (EN)" />' +
-        '<input data-f="price" type="number" step="0.1" min="0" value="' + p.price + '" />' +
+        '<input data-f="price" type="text" inputmode="decimal" value="' + p.price + '" />' +
         '<select data-f="category"><option value="drinks"' + (p.category === 'drinks' ? ' selected' : '') + '>' + t('drinks') + '</option><option value="sweets"' + (p.category === 'sweets' ? ' selected' : '') + '>' + t('sweets') + '</option></select>' +
         '<button class="medit-del" data-del="' + idx + '" title="' + t('deleteItem') + '">' + icon('trash') + '</button>' +
       '</div>';

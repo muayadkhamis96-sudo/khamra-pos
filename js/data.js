@@ -197,6 +197,11 @@
     if (list.indexOf(name) === -1) { list.push(name); write(KEYS.expenseCats, list); }
     return list;
   }
+  function deleteExpenseCat(name) {
+    var list = getExpenseCats().filter(function (c) { return c !== name; });
+    write(KEYS.expenseCats, list);
+    return list;
+  }
 
   function monthOf(day) { return String(day).slice(0, 7); }   // YYYY-MM
 
@@ -323,6 +328,8 @@
     noExpenses:     { ar: 'لا توجد مصاريف بعد', en: 'No expenses yet' },
     monthLabel:     { ar: 'الشهر', en: 'Month' },
     deleteExpenseConfirm: { ar: 'حذف هذا المصروف؟', en: 'Delete this expense?' },
+    myCategories:   { ar: 'الفئات المضافة', en: 'Added categories' },
+    deleteCatConfirm: { ar: 'حذف هذه الفئة؟ (المصاريف المسجّلة بها تبقى كما هي)', en: 'Delete this category? (Existing expenses keep it.)' },
     inventoryHint:  { ar: 'حدّد الكمية المتوفرة لكل صنف من السويتات. تنقص تلقائياً مع كل عملية بيع.', en: 'Set the available quantity for each sweet. It counts down automatically with each sale.' },
     stockLeft:      { ar: 'متبقي', en: 'left' },
     soldOut:        { ar: 'نفذت الكمية', en: 'Sold out' },
@@ -488,7 +495,7 @@
     t: t, money: money, num: num, toArabicDigits: toArabicDigits,
     // expenses
     getExpenses: getExpenses, addExpense: addExpense, updateExpense: updateExpense, deleteExpense: deleteExpense,
-    getExpenseCats: getExpenseCats, addExpenseCat: addExpenseCat, finance: finance, expenseMonths: expenseMonths, monthOf: monthOf,
+    getExpenseCats: getExpenseCats, addExpenseCat: addExpenseCat, deleteExpenseCat: deleteExpenseCat, finance: finance, expenseMonths: expenseMonths, monthOf: monthOf,
     // export
     salesToCSV: salesToCSV, backupJSON: backupJSON
   };
