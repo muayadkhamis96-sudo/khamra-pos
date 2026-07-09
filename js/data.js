@@ -13,7 +13,9 @@
     sales: 'khamra.sales',
     settings: 'khamra.settings',
     seq: 'khamra.orderSeq',
-    pinV: 'khamra.pinVersion'
+    pinV: 'khamra.pinVersion',
+    expenses: 'khamra.expenses',
+    expenseCats: 'khamra.expenseCats'
   };
 
   // --- Default menu (from the booth menu, bilingual) --------------------
@@ -162,6 +164,62 @@
 
   function clearSales() { write(KEYS.sales, []); }
 
+  // --- Expenses ---------------------------------------------------------
+  function getExpenses() { return read(KEYS.expenses, []); }
+  function saveExpenses(list) { return write(KEYS.expenses, list); }
+  function addExpense(e) {
+    var list = getExpenses(), now = new Date();
+    var rec = {
+      id: 'E' + now.getTime() + '-' + Math.floor(Math.random() * 1000),
+      ts: now.getTime(),
+      day: e.day || dayKey(now),
+      category: e.category || 'other',
+      desc: e.desc || '',
+      amount: Math.max(0, Number(e.amount) || 0)
+    };
+    list.push(rec); saveExpenses(list); return rec;
+  }
+  function updateExpense(id, patch) {
+    var list = getExpenses();
+    var x = list.filter(function (e) { return e.id === id; })[0];
+    if (!x) return;
+    for (var k in patch) x[k] = patch[k];
+    if ('amount' in patch) x.amount = Math.max(0, Number(patch.amount) || 0);
+    saveExpenses(list);
+  }
+  function deleteExpense(id) { saveExpenses(getExpenses().filter(function (e) { return e.id !== id; })); }
+
+  // custom expense categories (array of user-typed names)
+  function getExpenseCats() { return read(KEYS.expenseCats, []); }
+  function addExpenseCat(name) {
+    name = String(name || '').trim(); if (!name) return getExpenseCats();
+    var list = getExpenseCats();
+    if (list.indexOf(name) === -1) { list.push(name); write(KEYS.expenseCats, list); }
+    return list;
+  }
+
+  function monthOf(day) { return String(day).slice(0, 7); }   // YYYY-MM
+
+  // Revenue / expenses / profit for a month (YYYY-MM) or null = all time.
+  function finance(monthKey) {
+    var exp = getExpenses().filter(function (e) { return !monthKey || monthOf(e.day) === monthKey; });
+    var sales = getSales().filter(function (s) { return !monthKey || monthOf(s.day) === monthKey; });
+    var expenses = exp.reduce(function (a, e) { return a + (e.amount || 0); }, 0);
+    var revenue = sales.reduce(function (a, s) { return a + s.total; }, 0);
+    var byCat = {};
+    exp.forEach(function (e) { byCat[e.category] = (byCat[e.category] || 0) + (e.amount || 0); });
+    return { revenue: revenue, expenses: expenses, profit: revenue - expenses, byCat: byCat, count: exp.length };
+  }
+
+  // Months (YYYY-MM) that have any expense or sale, newest first (+ current).
+  function expenseMonths() {
+    var set = {};
+    getExpenses().forEach(function (e) { set[monthOf(e.day)] = 1; });
+    getSales().forEach(function (s) { set[monthOf(s.day)] = 1; });
+    set[monthOf(dayKey())] = 1;
+    return Object.keys(set).sort().reverse();
+  }
+
   // --- Date helpers (local-day based) ----------------------------------
   function dayKey(d) {
     d = d || new Date();
@@ -246,7 +304,25 @@
     navSale:        { ar: 'نقطة البيع', en: 'Sale' },
     navReports:     { ar: 'التقارير', en: 'Reports' },
     navInventory:   { ar: 'المخزون', en: 'Inventory' },
+    navExpenses:    { ar: 'المصاريف', en: 'Expenses' },
     navSettings:    { ar: 'الإعدادات', en: 'Settings' },
+    expensesHint:   { ar: 'سجّل مصاريف المحل. تُخصم من الإيرادات لحساب الربح.', en: 'Record the booth\'s expenses. They are subtracted from revenue to show profit.' },
+    cat_salary:     { ar: 'رواتب', en: 'Salary' },
+    cat_rent:       { ar: 'إيجار', en: 'Rent' },
+    cat_goods:      { ar: 'بضاعة', en: 'Goods' },
+    cat_other:      { ar: 'أخرى', en: 'Other' },
+    expDesc:        { ar: 'البيان', en: 'Item / note' },
+    amount:         { ar: 'المبلغ', en: 'Amount' },
+    expDate:        { ar: 'التاريخ', en: 'Date' },
+    netProfit:      { ar: 'صافي الربح', en: 'Net profit' },
+    totalExpenses:  { ar: 'إجمالي المصاريف', en: 'Total expenses' },
+    addExpenseBtn:  { ar: 'إضافة مصروف', en: 'Add expense' },
+    addCategoryBtn: { ar: 'فئة جديدة', en: 'New category' },
+    newCatPrompt:   { ar: 'اسم الفئة الجديدة', en: 'New category name' },
+    downloadExcel:  { ar: 'تنزيل Excel', en: 'Download Excel' },
+    noExpenses:     { ar: 'لا توجد مصاريف بعد', en: 'No expenses yet' },
+    monthLabel:     { ar: 'الشهر', en: 'Month' },
+    deleteExpenseConfirm: { ar: 'حذف هذا المصروف؟', en: 'Delete this expense?' },
     inventoryHint:  { ar: 'حدّد الكمية المتوفرة لكل صنف من السويتات. تنقص تلقائياً مع كل عملية بيع.', en: 'Set the available quantity for each sweet. It counts down automatically with each sale.' },
     stockLeft:      { ar: 'متبقي', en: 'left' },
     soldOut:        { ar: 'نفذت الكمية', en: 'Sold out' },
@@ -410,6 +486,9 @@
     statsForDay: statsForDay, lastDays: lastDays, allTime: allTime, dayKey: dayKey,
     // i18n + format
     t: t, money: money, num: num, toArabicDigits: toArabicDigits,
+    // expenses
+    getExpenses: getExpenses, addExpense: addExpense, updateExpense: updateExpense, deleteExpense: deleteExpense,
+    getExpenseCats: getExpenseCats, addExpenseCat: addExpenseCat, finance: finance, expenseMonths: expenseMonths, monthOf: monthOf,
     // export
     salesToCSV: salesToCSV, backupJSON: backupJSON
   };

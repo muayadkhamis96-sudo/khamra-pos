@@ -130,7 +130,7 @@
     $$('.nav-btn[data-route]').forEach(function (b) { b.classList.toggle('active', b.dataset.route === route); });
     $$('.page').forEach(function (p) { p.classList.add('hidden'); });
     $('#page-' + route).classList.remove('hidden');
-    var titles = { sale: 'navSale', inventory: 'navInventory', reports: 'navReports', settings: 'navSettings' };
+    var titles = { sale: 'navSale', inventory: 'navInventory', reports: 'navReports', expenses: 'navExpenses', settings: 'navSettings' };
     $('#pageTitle').textContent = t(titles[route]);
     renderRoute();
   }
@@ -138,6 +138,7 @@
     if (state.route === 'sale') { renderCatTabs(); renderProducts(); $('#pageSub').textContent = D.t('tagline', state.lang); }
     else if (state.route === 'inventory') renderInventory();
     else if (state.route === 'reports') renderReports();
+    else if (state.route === 'expenses') renderExpenses();
     else if (state.route === 'settings') renderSettings();
   }
 
@@ -529,6 +530,122 @@
     var p = String(key).split('-');
     var d = new Date(+p[0], +p[1] - 1, +p[2]);
     return d.toLocaleDateString(state.lang === 'ar' ? 'ar' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  // =====================================================================
+  // EXPENSES
+  // =====================================================================
+  function currentMonth() { return D.monthOf(D.dayKey()); }
+  function monthLabelText(mk) {
+    if (mk === 'all') return t('allTime');
+    var p = String(mk).split('-'); var d = new Date(+p[0], +p[1] - 1, 1);
+    return d.toLocaleDateString(state.lang === 'ar' ? 'ar' : 'en-GB', { month: 'long', year: 'numeric' });
+  }
+  function catLabel(cat) {
+    return (cat === 'salary' || cat === 'rent' || cat === 'goods' || cat === 'other') ? t('cat_' + cat) : String(cat);
+  }
+  function catOptions(sel) {
+    var defs = ['salary', 'rent', 'goods', 'other'];
+    var out = defs.map(function (k) { return '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + t('cat_' + k) + '</option>'; });
+    D.getExpenseCats().forEach(function (c) { out.push('<option value="' + escapeAttr(c) + '"' + (c === sel ? ' selected' : '') + '>' + escapeAttr(c) + '</option>'); });
+    if (sel && defs.indexOf(sel) === -1 && D.getExpenseCats().indexOf(sel) === -1) out.push('<option value="' + escapeAttr(sel) + '" selected>' + escapeAttr(sel) + '</option>');
+    return out.join('');
+  }
+
+  function renderExpenses() {
+    var page = $('#page-expenses');
+    if (!state.expMonth) state.expMonth = currentMonth();
+    var mk = state.expMonth === 'all' ? null : state.expMonth;
+    var fin = D.finance(mk);
+    $('#pageSub').textContent = state.expMonth === 'all' ? t('allTime') : monthLabelText(state.expMonth);
+
+    var months = D.expenseMonths();
+    var html = '<div class="settings-wrap">';
+
+    // month selector
+    html += '<div class="field" style="max-width:300px;margin-bottom:18px"><label>' + t('monthLabel') + '</label><select id="expMonthSel">' +
+      months.map(function (m) { return '<option value="' + m + '"' + (m === state.expMonth ? ' selected' : '') + '>' + monthLabelText(m) + '</option>'; }).join('') +
+      '<option value="all"' + (state.expMonth === 'all' ? ' selected' : '') + '>' + t('allTime') + '</option>' +
+    '</select></div>';
+
+    // revenue / expenses / net profit
+    html += '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:22px">' +
+      statCard('', 'coins', t('revenue'), D.money(fin.revenue, state.lang), cur()) +
+      statCard('', 'wallet', t('totalExpenses'), D.money(fin.expenses, state.lang), cur()) +
+      '<div class="stat hero"><div class="ico">' + icon('coins') + '</div><div class="k">' + t('netProfit') + '</div>' +
+        '<div class="v" style="color:' + (fin.profit >= 0 ? '#c7ecc9' : '#f3b3a4') + '">' + D.money(fin.profit, state.lang) + ' ' + cur() + '</div></div>' +
+    '</div>';
+
+    // expenses list for the selected scope
+    var exps = D.getExpenses().filter(function (e) { return !mk || D.monthOf(e.day) === mk; }).sort(function (a, b) { return b.ts - a.ts; });
+    html += '<div class="set-card"><h3>' + t('navExpenses') + '</h3><p class="hint">' + t('expensesHint') + '</p>' +
+      '<div class="exp-head exp-row"><span>' + t('expDate') + '</span><span>' + t('category') + '</span><span>' + t('expDesc') + '</span><span>' + t('amount') + '</span><span></span></div>' +
+      '<div class="exp-list" id="expList">';
+    if (!exps.length) html += '<div class="empty-state" style="padding:26px 0"><div>' + t('noExpenses') + '</div></div>';
+    else exps.forEach(function (e) {
+      html += '<div class="exp-row" data-id="' + e.id + '">' +
+        '<input type="date" data-f="day" value="' + e.day + '" />' +
+        '<select data-f="category">' + catOptions(e.category) + '</select>' +
+        '<input data-f="desc" value="' + escapeAttr(e.desc) + '" placeholder="' + t('expDesc') + '" />' +
+        '<input type="number" data-f="amount" inputmode="decimal" step="0.1" min="0" value="' + e.amount + '" />' +
+        '<button class="exp-del" data-del="' + e.id + '" title="' + t('deleteItem') + '">' + icon('trash') + '</button>' +
+      '</div>';
+    });
+    html += '</div>' +
+      '<div class="btn-row" style="margin-top:16px">' +
+        '<button class="btn btn-primary" id="addExpense">＋ ' + t('addExpenseBtn') + '</button>' +
+        '<button class="btn btn-ghost" id="addExpCat">＋ ' + t('addCategoryBtn') + '</button>' +
+        '<button class="btn btn-ghost" id="dlExcel">' + t('downloadExcel') + '</button>' +
+      '</div></div>';
+
+    html += '</div>';
+    page.innerHTML = html;
+
+    // bindings
+    $('#expMonthSel').onchange = function () { state.expMonth = this.value; renderExpenses(); };
+    $('#addExpense').onclick = function () {
+      var day = (state.expMonth === 'all' || state.expMonth === currentMonth()) ? D.dayKey() : state.expMonth + '-01';
+      D.addExpense({ day: day, category: 'salary', desc: '', amount: 0 });
+      renderExpenses();
+      var first = $('#expList .exp-row'); if (first) { first.scrollIntoView({ block: 'center' }); var a = $('[data-f="amount"]', first); if (a) a.focus(); }
+    };
+    $('#addExpCat').onclick = function () {
+      var name = prompt(t('newCatPrompt')); if (name && name.trim()) { D.addExpenseCat(name.trim()); renderExpenses(); toast(t('saved')); }
+    };
+    $('#dlExcel').onclick = function () { download('khamra-expenses-' + (state.expMonth || 'all') + '.xls', expensesToExcel(mk), 'application/vnd.ms-excel'); };
+    $$('#expList .exp-row').forEach(function (row) {
+      var id = row.dataset.id;
+      $$('[data-f]', row).forEach(function (inp) {
+        inp.onchange = function () {
+          var patch = {}; patch[inp.dataset.f] = inp.value;
+          D.updateExpense(id, patch);
+          if (inp.dataset.f === 'amount' || inp.dataset.f === 'day') renderExpenses();
+        };
+      });
+    });
+    $$('.exp-del', page).forEach(function (b) {
+      b.onclick = function () { if (confirm(t('deleteExpenseConfirm'))) { D.deleteExpense(b.dataset.del); renderExpenses(); toast(t('saved')); } };
+    });
+  }
+
+  // Expenses report as an Excel-openable file (HTML table saved as .xls).
+  function expensesToExcel(mk) {
+    var exps = D.getExpenses().filter(function (e) { return !mk || D.monthOf(e.day) === mk; }).sort(function (a, b) { return a.ts - b.ts; });
+    var fin = D.finance(mk);
+    var title = state.expMonth === 'all' ? t('allTime') : monthLabelText(state.expMonth);
+    var esc = function (v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var rows = exps.map(function (e) {
+      return '<tr><td>' + e.day + '</td><td>' + esc(catLabel(e.category)) + '</td><td>' + esc(e.desc) + '</td><td>' + (e.amount || 0).toFixed(3) + '</td></tr>';
+    }).join('');
+    return '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>' +
+      '<table border="1" cellspacing="0" cellpadding="4">' +
+      '<tr><th colspan="4" style="font-size:15px;text-align:left">Khamra — ' + t('navExpenses') + ' — ' + esc(title) + '</th></tr>' +
+      '<tr style="background:#eee"><th>' + t('expDate') + '</th><th>' + t('category') + '</th><th>' + t('expDesc') + '</th><th>' + t('amount') + ' (OMR)</th></tr>' +
+      rows +
+      '<tr><td colspan="3" style="font-weight:bold">' + t('totalExpenses') + '</td><td style="font-weight:bold">' + fin.expenses.toFixed(3) + '</td></tr>' +
+      '<tr><td colspan="3">' + t('revenue') + '</td><td>' + fin.revenue.toFixed(3) + '</td></tr>' +
+      '<tr><td colspan="3" style="font-weight:bold">' + t('netProfit') + '</td><td style="font-weight:bold">' + fin.profit.toFixed(3) + '</td></tr>' +
+      '</table></body></html>';
   }
 
   // =====================================================================

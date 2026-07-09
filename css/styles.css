@@ -512,6 +512,16 @@ input { font-family: inherit; }
 .medit-row select { height: 42px; font-size: 13px; }
 .medit-head { font-size: 12px; font-weight: 700; color: var(--muted); }
 
+/* Expenses list */
+.exp-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.exp-row { display: grid; grid-template-columns: 140px 130px 1fr 100px 34px; gap: 10px; align-items: center; }
+.exp-head { font-size: 12px; font-weight: 700; color: var(--muted); }
+.exp-row input, .exp-row select { height: 42px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--paper-2); color: var(--ink); font-size: 16px; font-weight: 600; }
+.exp-row input:focus, .exp-row select:focus { outline: none; border-color: var(--caramel); box-shadow: 0 0 0 3px rgba(185,116,47,0.15); background: #fff; }
+.exp-del { width: 34px; height: 42px; display: grid; place-items: center; color: var(--muted); border-radius: 8px; }
+.exp-del svg { width: 18px; height: 18px; }
+.exp-del:hover { color: var(--danger); background: rgba(180,80,63,0.10); }
+
 /* ============================================================
    MODAL — payment / confirm
    ============================================================ */
@@ -619,6 +629,13 @@ input { font-family: inherit; }
   .medit-row input[data-f="price"] { flex: 0 1 90px; }
   .medit-row select[data-f="category"] { flex: 1 1 110px; }
   .medit-del { margin-inline-start: auto; }
+  .exp-head { display: none; }
+  .exp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .exp-row input[type="date"] { flex: 1 1 45%; }
+  .exp-row select[data-f="category"] { flex: 1 1 45%; }
+  .exp-row input[data-f="desc"] { flex: 1 1 100%; }
+  .exp-row input[data-f="amount"] { flex: 1 1 100px; }
+  .exp-del { margin-inline-start: auto; }
 }
 @media (max-width: 560px) {
   .topbar { padding: 16px; }
