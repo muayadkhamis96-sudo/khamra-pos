@@ -53,9 +53,9 @@ A PIN gate protects the till.
 | --- | --- |
 | **Sale** (نقطة البيع) | Tap products (with **photos**) to build an order, adjust quantities, take **Cash or Card**, and record the sale. Sweets you're tracking show how many are **left**, and a sold‑out one can't be added to an order. |
 | **Inventory** (المخزون) | Set a stock count for each sweet. It **counts down automatically with every sale**, shows *"3 left"* on the sale grid, and flips to a **SOLD OUT** overlay at zero. Leave a count blank for unlimited — drinks are never tracked. |
-| **Reports** (التقارير) | Today vs. all‑time **revenue**, order count, items sold, average order, a **7‑day revenue chart** (tap any day to open that day's full report), the **top‑selling product**, a best‑sellers ranking, and recent orders. The top seller only appears once one product genuinely leads — while sales are tied it shows *"no clear top seller yet."* **Download Excel** saves the whole report — summary, 7‑day breakdown, best sellers and *every* order line by line — for whichever period is on screen. |
+| **Reports** (التقارير) | Today vs. all‑time **revenue**, order count, items sold, average order, a **7‑day revenue chart** (tap any day to open that day's full report), the **top‑selling product**, a best‑sellers ranking, and recent orders. The top seller only appears once one product genuinely leads — while sales are tied it shows *"no clear top seller yet."* **Download Excel** saves the whole report — summary, 7‑day breakdown, best sellers, that period's **expenses and net profit**, and *every* order line by line — for whichever period is on screen. |
 | **Expenses** (المصاريف) | Log what the booth spends — **salary, rent, goods, other**, plus any categories you add yourself — and pick a month to see **revenue − expenses = net profit** for it. **Download Excel** exports that month's expenses with the profit line. |
-| **Settings** (الإعدادات) | Switch language, change the PIN, edit menu items & prices, **add a real photo to each product**, and **export sales to CSV / back up to JSON / clear history**. |
+| **Settings** (الإعدادات) | Switch language, change the PIN, edit menu items & prices, **add a real photo to each product**, and **export sales to CSV / back up to JSON / import a backup / clear history**. |
 
 ### Product photos
 
@@ -103,16 +103,31 @@ symbol lives at `assets/omr.svg` — replace that one file to update it everywhe
 Menu, settings, sales, expenses and stock counts all live in the browser's
 **localStorage** on the device — private and offline.
 
-Two things worth knowing before you rely on it:
+### Backup & restore
 
-- **The JSON backup does not include expenses.** `Settings → Backup (JSON)`
-  saves your menu, settings and sales only. Export expenses separately from
-  **Expenses → Download Excel**.
-- **Exports are one‑way.** There is no import screen, so a backup file can't be
-  loaded back into the app on its own.
+**Settings → Backup (JSON)** saves everything — menu, settings, sales,
+expenses and your custom expense categories. The PIN is deliberately left out
+of the file.
 
-So treat the exports as your paper trail, not as a restore button, and take
-them regularly — clearing the browser's website data wipes everything.
+**Settings → Import backup** loads one back in, and it **merges**: any record
+already on the device is left exactly as it is, and only what's missing gets
+added. So you can
+
+- restore onto a fresh device (nothing is there yet, so everything lands), or
+- pull a second device's sales and expenses into this one without creating
+  duplicates.
+
+Importing the same file twice is harmless — the second time adds nothing. It
+never deletes, never overwrites an existing record, and never touches your PIN
+or language. Afterwards you're told exactly what was added (*"Added: 12 orders,
+3 expenses"*), and anything unreadable in the file is skipped and counted
+rather than silently dropped.
+
+> Order numbering is bumped past any imported order, so the next sale you ring
+> up can't reuse a number that arrived in the file.
+
+Still take backups regularly — clearing the browser's website data wipes
+everything on the device.
 
 ## Powered by Futureline.ai
 

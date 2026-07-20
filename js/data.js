@@ -40,6 +40,7 @@
     boothName: 'Khamra'
   };
 
+  var BACKUP_VERSION = 2;   // 1 = menu/settings/sales only; 2 adds expenses
   var DEFAULT_PIN = '123456';
   var PIN_VERSION = '6'; // bump if the PIN scheme changes (forces a one-time reset)
 
@@ -420,6 +421,12 @@
     data:          { ar: 'البيانات', en: 'Data' },
     exportData:     { ar: 'تصدير المبيعات (CSV)', en: 'Export sales (CSV)' },
     backup:         { ar: 'نسخة احتياطية (JSON)', en: 'Backup (JSON)' },
+    importBackup:   { ar: 'استيراد نسخة احتياطية', en: 'Import backup' },
+    importHint:     { ar: 'يضيف ما ينقص من الملف فقط — لا يحذف أو يستبدل شيئاً موجوداً، ولا يغيّر الرمز السري.', en: 'Adds only what is missing from the file — nothing already here is deleted or replaced, and your PIN is never changed.' },
+    importBadFile:  { ar: 'هذا الملف ليس نسخة احتياطية من خمرة', en: 'That file is not a Khamra backup' },
+    importNothing:  { ar: 'لا يوجد جديد في هذا الملف', en: 'Nothing new in that file' },
+    importAdded:    { ar: 'تمت الإضافة', en: 'Added' },
+    importSkipped:  { ar: 'سجلات متجاهلة', en: 'skipped' },
     clearData:      { ar: 'مسح كل المبيعات', en: 'Clear all sales' },
     clearConfirm:   { ar: 'سيتم حذف كل سجل المبيعات نهائياً. متابعة؟', en: 'This will permanently delete all sales history. Continue?' },
     defaultPinWarn: { ar: 'أنت تستخدم الرمز الافتراضي 123456 — يُنصح بتغييره.', en: 'You are using the default PIN 123456 — please change it.' },
@@ -469,13 +476,106 @@
     }).join('\n');
   }
 
+  // A backup carries everything that lives on the device except the PIN, which
+  // is stored separately and deliberately stays out of the file.
   function backupJSON() {
     return JSON.stringify({
       exported: new Date().toISOString(),
+      version: BACKUP_VERSION,
       menu: getMenu(),
       settings: getSettings(),
-      sales: getSales()
+      sales: getSales(),
+      expenses: getExpenses(),
+      expenseCats: getExpenseCats()
     }, null, 2);
+  }
+
+  // --- Import (merge) ---------------------------------------------------
+  // Merges a backup file into what is already on the device: a record whose id
+  // is already here is left untouched, anything new is added. Settings and the
+  // PIN are never changed, so importing can't lock anyone out or silently
+  // switch the language mid-shift.
+  //
+  // Returns { added: {menu,sales,expenses,cats}, skipped } or throws Error with
+  // .code 'parse' (not JSON) / 'shape' (JSON, but not a Khamra backup).
+  function importBackup(text) {
+    var data;
+    try { data = JSON.parse(text); } catch (e) { throw fail('parse'); }
+    if (!data || typeof data !== 'object' || isArr(data)) throw fail('shape');
+    // Must carry at least one collection we know how to merge, otherwise this
+    // is some other JSON file that happens to be valid.
+    if (!isArr(data.menu) && !isArr(data.sales) && !isArr(data.expenses) && !isArr(data.expenseCats)) throw fail('shape');
+
+    var added = { menu: 0, sales: 0, expenses: 0, cats: 0 }, skipped = 0;
+
+    if (isArr(data.menu)) {
+      var menu = getMenu(), haveItem = index(menu);
+      data.menu.forEach(function (it) {
+        if (!it || !it.id) { skipped++; return; }
+        if (haveItem[it.id]) return;              // keep the local copy, incl. its stock & photo
+        haveItem[it.id] = 1; menu.push(it); added.menu++;
+      });
+      if (added.menu) saveMenu(menu);
+    }
+
+    if (isArr(data.sales)) {
+      var sales = getSales(), haveSale = index(sales);
+      data.sales.forEach(function (s) {
+        if (!validSale(s)) { skipped++; return; }
+        if (haveSale[s.id]) return;
+        // `count` drives the "items sold" stat; backfill it rather than let a
+        // file from an older build turn that number into NaN.
+        if (!isFinite(s.count)) s.count = s.items.reduce(function (a, i) { return a + (i.qty | 0); }, 0);
+        haveSale[s.id] = 1; sales.push(s); added.sales++;
+      });
+      if (added.sales) {
+        // Analytics and the recent-orders list both read this array in order,
+        // so imported history has to slot into place chronologically.
+        sales.sort(function (a, b) { return a.ts - b.ts; });
+        write(KEYS.sales, sales);
+        // Keep numbering ahead of every order now on the device, so the next
+        // sale can't reuse an imported order number.
+        var maxNo = 0;
+        sales.forEach(function (s) { if ((s.no | 0) > maxNo) maxNo = s.no | 0; });
+        if (maxNo > (read(KEYS.seq, 0) | 0)) write(KEYS.seq, maxNo);
+      }
+    }
+
+    if (isArr(data.expenses)) {
+      var exps = getExpenses(), haveExp = index(exps);
+      data.expenses.forEach(function (e) {
+        if (!validExpense(e)) { skipped++; return; }
+        if (haveExp[e.id]) return;
+        haveExp[e.id] = 1; exps.push(e); added.expenses++;
+      });
+      if (added.expenses) { exps.sort(function (a, b) { return a.ts - b.ts; }); saveExpenses(exps); }
+    }
+
+    if (isArr(data.expenseCats)) {
+      data.expenseCats.forEach(function (c) {
+        if (typeof c !== 'string' || !c.trim()) { skipped++; return; }
+        var before = getExpenseCats().length;
+        addExpenseCat(c);
+        if (getExpenseCats().length > before) added.cats++;
+      });
+    }
+
+    return { added: added, skipped: skipped };
+  }
+
+  function fail(code) { var e = new Error(code); e.code = code; return e; }
+  function isArr(v) { return Object.prototype.toString.call(v) === '[object Array]'; }
+  function index(list) {
+    var map = {};
+    list.forEach(function (x) { if (x && x.id) map[x.id] = 1; });
+    return map;
+  }
+  function validSale(s) {
+    return !!s && typeof s.id === 'string' && isArr(s.items) &&
+      isFinite(s.ts) && isFinite(s.total) && typeof s.day === 'string';
+  }
+  function validExpense(e) {
+    return !!e && typeof e.id === 'string' && typeof e.day === 'string' && isFinite(e.amount);
   }
 
   // --- Migration --------------------------------------------------------
@@ -509,8 +609,8 @@
     // expenses
     getExpenses: getExpenses, addExpense: addExpense, updateExpense: updateExpense, deleteExpense: deleteExpense,
     getExpenseCats: getExpenseCats, addExpenseCat: addExpenseCat, deleteExpenseCat: deleteExpenseCat, finance: finance, expenseMonths: expenseMonths, monthOf: monthOf,
-    // export
-    salesToCSV: salesToCSV, backupJSON: backupJSON
+    // export / import
+    salesToCSV: salesToCSV, backupJSON: backupJSON, importBackup: importBackup
   };
 
 })(window);

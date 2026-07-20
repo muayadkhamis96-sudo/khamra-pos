@@ -548,6 +548,12 @@
   function reportToExcel(key) {
     var s = key ? D.statsForDay(key) : D.allTime();
     var sales = D.getSales().filter(function (x) { return !key || x.day === key; });
+    // Expenses are normally scoped by month, but here they follow the report's
+    // own scope so every number in the file covers the same period.
+    var exps = D.getExpenses().filter(function (e) { return !key || e.day === key; })
+      .sort(function (a, b) { return a.ts - b.ts; });
+    var expTotal = exps.reduce(function (a, e) { return a + (e.amount || 0); }, 0);
+    var profit = s.revenue - expTotal;
     var COLS = 10;
     var m = function (v) { return D.money(v, 'en'); };
     var spacer = '<tr><td colspan="' + COLS + '"></td></tr>';
@@ -567,10 +573,12 @@
     // summary
     out += section(t('summary'));
     [[t('revenue') + ' (OMR)', m(s.revenue)], [t('orders'), s.orders], [t('itemsSold'), s.items],
-     [t('avgOrder') + ' (OMR)', m(s.avg)], [t('cash') + ' (OMR)', m(s.cash)], [t('card') + ' (OMR)', m(s.card)]
+     [t('avgOrder') + ' (OMR)', m(s.avg)], [t('cash') + ' (OMR)', m(s.cash)], [t('card') + ' (OMR)', m(s.card)],
+     [t('totalExpenses') + ' (OMR)', m(expTotal)]
     ].forEach(function (r) {
       out += '<tr><td colspan="3">' + r[0] + '</td><td>' + r[1] + '</td></tr>';
     });
+    out += '<tr style="font-weight:bold"><td colspan="3">' + t('netProfit') + ' (OMR)</td><td>' + m(profit) + '</td></tr>';
     out += spacer;
 
     // last 7 days (same window as the on-screen chart)
@@ -590,6 +598,19 @@
       out += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(p.ar) + '</td><td>' + escapeHtml(p.en) + '</td>' +
         '<td>' + p.qty + '</td><td>' + m(p.revenue) + '</td></tr>';
     });
+    out += spacer;
+
+    // expenses for the same period, then the profit they leave behind
+    out += section(t('navExpenses'));
+    out += head([t('expDate'), t('category'), t('expDesc'), t('amount') + ' (OMR)']);
+    if (!exps.length) out += '<tr><td colspan="4">' + t('noExpenses') + '</td></tr>';
+    else exps.forEach(function (e) {
+      out += '<tr><td>' + e.day + '</td><td>' + escapeHtml(catLabel(e.category)) + '</td>' +
+        '<td>' + escapeHtml(e.desc) + '</td><td>' + m(e.amount || 0) + '</td></tr>';
+    });
+    out += '<tr style="font-weight:bold"><td colspan="3">' + t('totalExpenses') + '</td><td>' + m(expTotal) + '</td></tr>';
+    out += '<tr><td colspan="3">' + t('revenue') + '</td><td>' + m(s.revenue) + '</td></tr>';
+    out += '<tr style="font-weight:bold"><td colspan="3">' + t('netProfit') + '</td><td>' + m(profit) + '</td></tr>';
     out += spacer;
 
     // every order, one row per line item
@@ -798,8 +819,10 @@
       '<div class="btn-row">' +
         '<button class="btn btn-ghost" id="exportCsv">' + t('exportData') + '</button>' +
         '<button class="btn btn-ghost" id="backupJson">' + t('backup') + '</button>' +
+        '<button class="btn btn-ghost" id="importJson">' + t('importBackup') + '</button>' +
         '<button class="btn btn-danger" id="clearData">' + t('clearData') + '</button>' +
-      '</div></div>';
+      '</div>' +
+      '<p class="hint" style="margin-top:12px">' + t('importHint') + '</p></div>';
 
     html += '</div>';
     page.innerHTML = html;
@@ -857,7 +880,56 @@
     };
     $('#exportCsv').onclick = function () { download('khamra-sales-' + D.dayKey() + '.csv', D.salesToCSV(), 'text/csv'); };
     $('#backupJson').onclick = function () { download('khamra-backup-' + D.dayKey() + '.json', D.backupJSON(), 'application/json'); };
+    $('#importJson').onclick = pickBackupFile;
     $('#clearData').onclick = function () { if (confirm(t('clearConfirm'))) { D.clearSales(); toast(t('saved')); if (state.route === 'reports') renderReports(); } };
+  }
+
+  // ----- Import a backup file (merge) -----
+  function pickBackupFile() {
+    var inp = $('#backupFile');
+    if (!inp) {
+      inp = el('input'); inp.type = 'file';
+      inp.accept = 'application/json,.json';
+      inp.id = 'backupFile'; inp.style.display = 'none';
+      document.body.appendChild(inp);
+      inp.onchange = function () {
+        var f = inp.files && inp.files[0];
+        if (f) readBackupFile(f);
+        inp.value = '';   // so picking the same file twice still fires onchange
+      };
+    }
+    inp.click();
+  }
+  function readBackupFile(file) {
+    var r = new FileReader();
+    r.onerror = function () { toast(t('importBadFile'), true); };
+    r.onload = function () {
+      var res;
+      try {
+        res = D.importBackup(String(r.result));
+      } catch (e) {
+        toast(t('importBadFile'), true);
+        return;
+      }
+      var a = res.added;
+      var total = a.menu + a.sales + a.expenses + a.cats;
+      if (!total) { toast(t('importNothing')); return; }
+      // Say what actually landed — a silent "done" hides a half-read file.
+      var parts = [];
+      if (a.sales) parts.push(D.num(a.sales, state.lang) + ' ' + t('orders'));
+      if (a.expenses) parts.push(D.num(a.expenses, state.lang) + ' ' + t('navExpenses'));
+      if (a.menu) parts.push(D.num(a.menu, state.lang) + ' ' + t('items'));
+      if (a.cats) parts.push(D.num(a.cats, state.lang) + ' ' + t('category'));
+      var msg = t('importAdded') + ': ' + parts.join('، ');
+      if (res.skipped) msg += ' (' + D.num(res.skipped, state.lang) + ' ' + t('importSkipped') + ')';
+      toast(msg);
+      // Everything downstream of the merge needs redrawing.
+      renderSettings(); renderProducts();
+      if (state.route === 'reports') renderReports();
+      if (state.route === 'expenses') renderExpenses();
+      if (state.route === 'inventory') renderInventory();
+    };
+    r.readAsText(file);
   }
 
   function saveNewPin() {
