@@ -51,8 +51,10 @@ A PIN gate protects the till.
 
 | Screen | What you get |
 | --- | --- |
-| **Sale** (نقطة البيع) | Tap products (with **photos**) to build an order, adjust quantities, take **Cash or Card**, and record the sale. |
-| **Reports** (التقارير) | Today vs. all‑time **revenue**, order count, items sold, average order, a **7‑day revenue chart**, the **top‑selling product**, a best‑sellers ranking, and recent orders. The top seller only appears once one product genuinely leads — while sales are tied it shows *"no clear top seller yet."* **Download Excel** saves the whole report — summary, 7‑day breakdown, best sellers and *every* order line by line — for whichever period is on screen. |
+| **Sale** (نقطة البيع) | Tap products (with **photos**) to build an order, adjust quantities, take **Cash or Card**, and record the sale. Sweets you're tracking show how many are **left**, and a sold‑out one can't be added to an order. |
+| **Inventory** (المخزون) | Set a stock count for each sweet. It **counts down automatically with every sale**, shows *"3 left"* on the sale grid, and flips to a **SOLD OUT** overlay at zero. Leave a count blank for unlimited — drinks are never tracked. |
+| **Reports** (التقارير) | Today vs. all‑time **revenue**, order count, items sold, average order, a **7‑day revenue chart** (tap any day to open that day's full report), the **top‑selling product**, a best‑sellers ranking, and recent orders. The top seller only appears once one product genuinely leads — while sales are tied it shows *"no clear top seller yet."* **Download Excel** saves the whole report — summary, 7‑day breakdown, best sellers and *every* order line by line — for whichever period is on screen. |
+| **Expenses** (المصاريف) | Log what the booth spends — **salary, rent, goods, other**, plus any categories you add yourself — and pick a month to see **revenue − expenses = net profit** for it. **Download Excel** exports that month's expenses with the profit line. |
 | **Settings** (الإعدادات) | Switch language, change the PIN, edit menu items & prices, **add a real photo to each product**, and **export sales to CSV / back up to JSON / clear history**. |
 
 ### Product photos
@@ -98,9 +100,19 @@ symbol lives at `assets/omr.svg` — replace that one file to update it everywhe
 
 ## Where the data lives
 
-All menu, settings, and sales are saved in the browser's **localStorage** on the
-device — private and offline. To move data to another device, use
-**Settings → Backup (JSON)**. Keep regular CSV/JSON exports as your safety net.
+Menu, settings, sales, expenses and stock counts all live in the browser's
+**localStorage** on the device — private and offline.
+
+Two things worth knowing before you rely on it:
+
+- **The JSON backup does not include expenses.** `Settings → Backup (JSON)`
+  saves your menu, settings and sales only. Export expenses separately from
+  **Expenses → Download Excel**.
+- **Exports are one‑way.** There is no import screen, so a backup file can't be
+  loaded back into the app on its own.
+
+So treat the exports as your paper trail, not as a restore button, and take
+them regularly — clearing the browser's website data wipes everything.
 
 ## Powered by Futureline.ai
 
@@ -121,7 +133,8 @@ it (background removed; a light variant for the dark lock screen).
 ```
 index.html        app shell + icons
 css/styles.css    theme & layout (tea palette)
-js/data.js        storage, menu, currency, analytics, i18n
-js/app.js         PIN gate, sale flow, reports, settings
+js/data.js        storage, menu, stock, expenses, currency, analytics, i18n
+js/app.js         PIN gate, sale flow, inventory, reports, expenses, settings
+sw.js             service worker — offline cache (bump CACHE to push updates)
 assets/           brand logo (dark + light)
 ```
