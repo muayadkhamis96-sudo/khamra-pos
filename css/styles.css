@@ -203,6 +203,10 @@ input { font-family: inherit; }
 .lang-toggle button { padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .lang-toggle button.on { background: var(--brown); color: #fff; }
 
+/* Reports header: scope toggle on one side, export button on the other. */
+.rep-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+.rep-head .btn { height: 40px; padding: 0 18px; font-size: 13px; }
+
 /* ============================================================
    POS — SALE SCREEN
    ============================================================ */

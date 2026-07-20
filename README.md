@@ -52,7 +52,7 @@ A PIN gate protects the till.
 | Screen | What you get |
 | --- | --- |
 | **Sale** (نقطة البيع) | Tap products (with **photos**) to build an order, adjust quantities, take **Cash or Card**, and record the sale. |
-| **Reports** (التقارير) | Today vs. all‑time **revenue**, order count, items sold, average order, a **7‑day revenue chart**, the **top‑selling product**, a best‑sellers ranking, and recent orders. The top seller only appears once one product genuinely leads — while sales are tied it shows *"no clear top seller yet."* |
+| **Reports** (التقارير) | Today vs. all‑time **revenue**, order count, items sold, average order, a **7‑day revenue chart**, the **top‑selling product**, a best‑sellers ranking, and recent orders. The top seller only appears once one product genuinely leads — while sales are tied it shows *"no clear top seller yet."* **Download Excel** saves the whole report — summary, 7‑day breakdown, best sellers and *every* order line by line — for whichever period is on screen. |
 | **Settings** (الإعدادات) | Switch language, change the PIN, edit menu items & prices, **add a real photo to each product**, and **export sales to CSV / back up to JSON / clear history**. |
 
 ### Product photos

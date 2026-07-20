@@ -381,14 +381,16 @@
     var page = $('#page-reports');
     var key = scopeKey();
     var s = key ? D.statsForDay(key) : D.allTime();
-    $('#pageSub').textContent = state.scope === 'all' ? t('allTime')
-      : (state.scope === 'today' ? todayLabel() : dayLabel(key));
+    $('#pageSub').textContent = scopeLabel();
 
     var html = '';
-    // scope toggle
-    html += '<div class="lang-toggle" style="margin-bottom:22px">' +
-      '<button data-scope="today" class="' + (state.scope === 'today' ? 'on' : '') + '">' + t('today') + '</button>' +
-      '<button data-scope="all" class="' + (state.scope === 'all' ? 'on' : '') + '">' + t('allTime') + '</button>' +
+    // scope toggle + export (the file covers whatever scope is on screen)
+    html += '<div class="rep-head">' +
+      '<div class="lang-toggle">' +
+        '<button data-scope="today" class="' + (state.scope === 'today' ? 'on' : '') + '">' + t('today') + '</button>' +
+        '<button data-scope="all" class="' + (state.scope === 'all' ? 'on' : '') + '">' + t('allTime') + '</button>' +
+      '</div>' +
+      '<button class="btn btn-ghost" id="dlReport">' + t('downloadExcel') + '</button>' +
     '</div>';
 
     // stat cards
@@ -414,6 +416,9 @@
 
     page.innerHTML = html;
     $$('[data-scope]', page).forEach(function (b) { b.onclick = function () { state.scope = b.dataset.scope; renderReports(); }; });
+    $('#dlReport').onclick = function () {
+      download('khamra-report-' + (key || 'all-time') + '.xls', reportToExcel(key), 'application/vnd.ms-excel');
+    };
     // tap a day in the chart to view that day's full report
     $$('.bar-col[data-day]', page).forEach(function (b) {
       var pick = function () { var k = b.dataset.day; state.scope = (k === D.dayKey()) ? 'today' : k; renderReports(); };
@@ -531,6 +536,81 @@
     var d = new Date(+p[0], +p[1] - 1, +p[2]);
     return d.toLocaleDateString(state.lang === 'ar' ? 'ar' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   }
+  function scopeLabel() {
+    return state.scope === 'all' ? t('allTime')
+      : (state.scope === 'today' ? todayLabel() : dayLabel(scopeKey()));
+  }
+
+  // Full sales report as an Excel-openable file (HTML table saved as .xls).
+  // Covers whatever scope the screen is showing: key = a dayKey, or null = all
+  // time. Unlike the on-screen "recent orders" panel this lists every order.
+  // Amounts are written as plain numbers (English digits) so Excel can sum them.
+  function reportToExcel(key) {
+    var s = key ? D.statsForDay(key) : D.allTime();
+    var sales = D.getSales().filter(function (x) { return !key || x.day === key; });
+    var COLS = 10;
+    var m = function (v) { return D.money(v, 'en'); };
+    var spacer = '<tr><td colspan="' + COLS + '"></td></tr>';
+    var section = function (title) {
+      return '<tr><th colspan="' + COLS + '" style="background:#5a3114;color:#ffffff;text-align:left;font-size:13px">' + title + '</th></tr>';
+    };
+    var head = function (cells) {
+      return '<tr style="background:#fbf5ec;font-weight:bold">' + cells.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>';
+    };
+    var out = '';
+
+    // title
+    out += '<tr><th colspan="' + COLS + '" style="font-size:15px;text-align:left">Khamra — ' + t('navReports') + ' — ' + escapeHtml(scopeLabel()) + '</th></tr>';
+    out += '<tr><td colspan="' + COLS + '">' + t('generatedOn') + ': ' + new Date().toLocaleString('en-GB') + '</td></tr>';
+    out += spacer;
+
+    // summary
+    out += section(t('summary'));
+    [[t('revenue') + ' (OMR)', m(s.revenue)], [t('orders'), s.orders], [t('itemsSold'), s.items],
+     [t('avgOrder') + ' (OMR)', m(s.avg)], [t('cash') + ' (OMR)', m(s.cash)], [t('card') + ' (OMR)', m(s.card)]
+    ].forEach(function (r) {
+      out += '<tr><td colspan="3">' + r[0] + '</td><td>' + r[1] + '</td></tr>';
+    });
+    out += spacer;
+
+    // last 7 days (same window as the on-screen chart)
+    out += section(t('last7'));
+    out += head([t('expDate'), t('orders'), t('revenue') + ' (OMR)']);
+    D.lastDays(7).forEach(function (d) {
+      var wd = d.date.toLocaleDateString('en-GB', { weekday: 'short' });
+      out += '<tr><td>' + d.key + ' (' + wd + ')</td><td>' + d.orders + '</td><td>' + m(d.revenue) + '</td></tr>';
+    });
+    out += spacer;
+
+    // best sellers
+    out += section(t('bestSellers'));
+    out += head([t('rank'), t('product') + ' (AR)', t('product') + ' (EN)', t('qty'), t('revenue') + ' (OMR)']);
+    if (!s.products.length) out += '<tr><td colspan="5">' + t('noSales') + '</td></tr>';
+    else s.products.forEach(function (p, i) {
+      out += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(p.ar) + '</td><td>' + escapeHtml(p.en) + '</td>' +
+        '<td>' + p.qty + '</td><td>' + m(p.revenue) + '</td></tr>';
+    });
+    out += spacer;
+
+    // every order, one row per line item
+    out += section(t('allOrders'));
+    out += head([t('orderNo'), t('expDate'), t('time'), t('paymentMethod'), t('product') + ' (AR)',
+                 t('product') + ' (EN)', t('qty'), t('unitPrice') + ' (OMR)', t('lineTotal') + ' (OMR)', t('orderTotal') + ' (OMR)']);
+    if (!sales.length) out += '<tr><td colspan="' + COLS + '">' + t('noSales') + '</td></tr>';
+    else sales.forEach(function (sale) {
+      var time = new Date(sale.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      sale.items.forEach(function (it, i) {
+        // The order total sits on the first line only, so a column sum stays correct.
+        out += '<tr><td>' + sale.no + '</td><td>' + sale.day + '</td><td>' + time + '</td><td>' + t(sale.method) + '</td>' +
+          '<td>' + escapeHtml(it.ar) + '</td><td>' + escapeHtml(it.en) + '</td><td>' + it.qty + '</td>' +
+          '<td>' + m(it.price) + '</td><td>' + m(it.price * it.qty) + '</td>' +
+          '<td>' + (i === 0 ? m(sale.total) : '') + '</td></tr>';
+      });
+    });
+    out += '<tr style="font-weight:bold"><td colspan="9">' + t('grandTotal') + ' (OMR)</td><td>' + m(s.revenue) + '</td></tr>';
+
+    return xlsWrap(out);
+  }
 
   // =====================================================================
   // EXPENSES
@@ -643,19 +723,18 @@
     var exps = D.getExpenses().filter(function (e) { return !mk || D.monthOf(e.day) === mk; }).sort(function (a, b) { return a.ts - b.ts; });
     var fin = D.finance(mk);
     var title = state.expMonth === 'all' ? t('allTime') : monthLabelText(state.expMonth);
-    var esc = function (v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var esc = escapeHtml;
     var rows = exps.map(function (e) {
       return '<tr><td>' + e.day + '</td><td>' + esc(catLabel(e.category)) + '</td><td>' + esc(e.desc) + '</td><td>' + (e.amount || 0).toFixed(3) + '</td></tr>';
     }).join('');
-    return '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>' +
-      '<table border="1" cellspacing="0" cellpadding="4">' +
+    return xlsWrap(
       '<tr><th colspan="4" style="font-size:15px;text-align:left">Khamra — ' + t('navExpenses') + ' — ' + esc(title) + '</th></tr>' +
       '<tr style="background:#eee"><th>' + t('expDate') + '</th><th>' + t('category') + '</th><th>' + t('expDesc') + '</th><th>' + t('amount') + ' (OMR)</th></tr>' +
       rows +
       '<tr><td colspan="3" style="font-weight:bold">' + t('totalExpenses') + '</td><td style="font-weight:bold">' + fin.expenses.toFixed(3) + '</td></tr>' +
       '<tr><td colspan="3">' + t('revenue') + '</td><td>' + fin.revenue.toFixed(3) + '</td></tr>' +
-      '<tr><td colspan="3" style="font-weight:bold">' + t('netProfit') + '</td><td style="font-weight:bold">' + fin.profit.toFixed(3) + '</td></tr>' +
-      '</table></body></html>';
+      '<tr><td colspan="3" style="font-weight:bold">' + t('netProfit') + '</td><td style="font-weight:bold">' + fin.profit.toFixed(3) + '</td></tr>'
+    );
   }
 
   // =====================================================================
@@ -855,6 +934,15 @@
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 100);
   }
   function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  // Minimal Excel-openable workbook: an HTML table saved as .xls. No library,
+  // so it still works offline on the booth iPad.
+  function xlsWrap(rows) {
+    return '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>' +
+      '<table border="1" cellspacing="0" cellpadding="4">' + rows + '</table></body></html>';
+  }
 
   function updateClock() {
     var now = new Date();
