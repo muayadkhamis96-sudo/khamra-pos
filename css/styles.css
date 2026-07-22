@@ -559,6 +559,15 @@ input { font-family: inherit; }
 .pay-opt svg { width: 36px; height: 36px; color: var(--brown); }
 .pay-opt:hover { border-color: var(--caramel); transform: translateY(-2px); }
 
+/* Export "file ready" sheet (iOS save fallback) */
+.modal .ico-badge {
+  width: 58px; height: 58px; border-radius: 16px; margin: 0 auto 14px;
+  background: var(--paper-2); color: var(--caramel-600); display: grid; place-items: center;
+}
+.modal .ico-badge svg { width: 28px; height: 28px; }
+.modal .m-sub .fname { display: block; font-weight: 700; color: var(--ink); margin-bottom: 4px; word-break: break-all; }
+.modal .export-open { width: 100%; margin-top: 10px; text-decoration: none; }
+
 .success-mark {
   width: 84px; height: 84px; border-radius: 50%; margin: 0 auto 18px;
   background: linear-gradient(150deg, var(--good), #4a7a4f); display: grid; place-items: center;

@@ -1001,9 +1001,65 @@
   }
   function download(name, content, type) {
     var blob = new Blob([content], { type: type + ';charset=utf-8' });
+
+    // Safari before iOS 13 (the booth iPad — iPad mini 3 / iOS 12) ignores the
+    // `download` attribute and won't save a blob from a synthetic click, so every
+    // export button silently did nothing there. Route that browser through a path
+    // it can actually save from.
+    if (needsLegacySave()) { legacySave(name, content, blob, type); return; }
+
     var url = URL.createObjectURL(blob);
     var a = el('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 100);
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  }
+
+  // True on old iOS Safari (and any ancient browser without the download attr).
+  // iOS 13+ iPad reports itself as "Macintosh", so it won't match here and keeps
+  // the normal download path — which works from iOS 13 on.
+  function needsLegacySave() {
+    var ua = navigator.userAgent || '';
+    var iOS = /iP(ad|hone|od)/.test(ua);
+    var m = ua.match(/OS (\d+)[_.]/);
+    var ver = m ? parseInt(m[1], 10) : 0;   // 0 = couldn't read it → treat as old
+    return (iOS && ver < 13) || !('download' in el('a'));
+  }
+
+  // Open the file in a new view so the user can save it with the iOS Share sheet
+  // (Share → “Save to Files”, or open straight into Numbers/Excel). For text
+  // formats we also offer an in-app Copy, so there's always a way out.
+  function legacySave(name, content, blob, type) {
+    var url = URL.createObjectURL(blob);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);   // long enough to open/share
+    var canCopy = /^text\//.test(type) || type === 'application/json';
+    openModal(
+      '<div class="ico-badge">' + icon('receipt') + '</div>' +
+      '<h2>' + t('exportReady') + '</h2>' +
+      '<div class="m-sub"><span class="fname">' + escapeHtml(name) + '</span>' + t('exportIosHint') + '</div>' +
+      '<a class="btn btn-primary export-open" href="' + url + '" target="_blank" rel="noopener">' + t('openFile') + '</a>' +
+      (canCopy ? '<button class="btn btn-ghost export-open" id="expCopy">' + t('copyText') + '</button>' : '') +
+      '<button class="btn btn-ghost export-open" id="expClose">' + t('cancel') + '</button>'
+    );
+    $('#expClose').onclick = closeModal;
+    if (canCopy) $('#expCopy').onclick = function () {
+      var ok = copyText(content);
+      toast(t(ok ? 'copied' : 'copyFailed'), !ok);
+    };
+  }
+
+  // Clipboard copy that works on iOS 12 (no navigator.clipboard there).
+  function copyText(text) {
+    var ta = el('textarea'); ta.value = text;
+    ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.readOnly = false; ta.contentEditable = 'true';
+    document.body.appendChild(ta);
+    var ok = false;
+    try {
+      var range = document.createRange(); range.selectNodeContents(ta);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      ta.setSelectionRange(0, text.length);
+      ok = document.execCommand('copy');
+    } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
   }
   function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
   function escapeHtml(s) {
