@@ -1,0 +1,23 @@
+# Khamra POS API — joins the VPS's shared Caddy network so the Caddyfile can
+# reverse-proxy khamra.38.54.116.48.sslip.io/api/* -> khamra-api:8792.
+# The port is NOT published to the host: Caddy is the only way in.
+services:
+  khamra-api:
+    build: .
+    image: khamra-api
+    container_name: khamra-api
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Muscat          # business "day" boundaries follow booth time
+      DB_PATH: /data/khamra.db
+    volumes:
+      - khamra_data:/data
+    networks: [web]
+
+volumes:
+  khamra_data:
+
+networks:
+  web:
+    external: true
+    name: spintt-academy_default

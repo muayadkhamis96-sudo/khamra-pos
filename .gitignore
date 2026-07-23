@@ -3,3 +3,7 @@
 
 # Claude Code / preview config (not needed for deployment)
 .claude/
+
+# server local dev artifacts
+server/*.db
+server/*.db-*
