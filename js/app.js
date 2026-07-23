@@ -103,13 +103,24 @@
     var dots = $('#pinDots'); dots.innerHTML = '';
     for (var i = 0; i < PIN_LEN; i++) { var d = el('span', 'pin-dot' + (i < pinBuffer.length ? ' on' : '')); dots.appendChild(d); }
   }
+  var unlocking = false;
   function tryUnlock() {
-    if (D.verifyPin(pinBuffer)) { pinBuffer = ''; renderDots(); $('#lockErr').textContent = ''; unlock(); }
-    else {
+    if (unlocking) return;
+    unlocking = true;
+    // The server verifies the PIN; with no connection the cached PIN still
+    // opens the till (selling must survive an internet cut).
+    D.login(pinBuffer, function (err, info) {
+      unlocking = false;
+      if (!err) {
+        pinBuffer = ''; renderDots(); $('#lockErr').textContent = '';
+        unlock();
+        if (info && info.offline) toast(t('offlineMode'));
+        return;
+      }
       var lock = $('#lock'); lock.classList.add('shake');
-      $('#lockErr').textContent = t('wrongPin');
+      $('#lockErr').textContent = t(err === 'rateLimited' ? 'rateLimited' : 'wrongPin');
       setTimeout(function () { lock.classList.remove('shake'); pinBuffer = ''; renderDots(); }, 450);
-    }
+    });
   }
   function lockApp() {
     $('#app').classList.remove('on');
@@ -140,6 +151,7 @@
     else if (state.route === 'reports') renderReports();
     else if (state.route === 'expenses') renderExpenses();
     else if (state.route === 'settings') renderSettings();
+    updateSyncChip();
   }
 
   // =====================================================================
@@ -350,20 +362,26 @@
     $$('.inv-row', page).forEach(function (row) {
       var id = row.dataset.id;
       var input = $('.inv-num', row);
+      // Stock counts live on the server (they're shared across devices);
+      // a failed call re-renders from the cache so the UI never lies.
+      var pushStock = function (val) {
+        D.setStockRemote(id, val, function (err) {
+          if (err) toast(t('needsConnection'), true);
+          afterStockChange();
+        });
+      };
       input.onchange = function () {
         var v = input.value.trim();
-        D.setStock(id, v === '' ? null : parseInt(v, 10));
-        afterStockChange();
+        pushStock(v === '' ? null : parseInt(v, 10));
       };
       $$('.inv-btn', row).forEach(function (b) {
         b.onclick = function () {
           var m = menuItem(id);
           var curv = (m && typeof m.stock === 'number') ? m.stock : 0;
-          D.setStock(id, Math.max(0, curv + (+b.dataset.d)));
-          afterStockChange();
+          pushStock(Math.max(0, curv + (+b.dataset.d)));
         };
       });
-      $('.inv-unl', row).onclick = function () { D.setStock(id, null); afterStockChange(); };
+      $('.inv-unl', row).onclick = function () { pushStock(null); };
     });
   }
   // Re-render inventory + the sale grid so stock changes reflect immediately on the POS.
@@ -377,9 +395,14 @@
     if (state.scope === 'all') return null;
     return state.scope === 'today' ? D.dayKey() : state.scope;
   }
-  function renderReports() {
+  function renderReports(fromSync) {
     var page = $('#page-reports');
     var key = scopeKey();
+    // Paint instantly from the cache, then pull the server's truth (other
+    // devices may have sold) and repaint only if something actually changed.
+    if (!fromSync) D.refreshSales(function (err, changed) {
+      if (!err && changed && state.route === 'reports') renderReports(true);
+    });
     var s = key ? D.statsForDay(key) : D.allTime();
     $('#pageSub').textContent = scopeLabel();
 
@@ -426,7 +449,12 @@
       b.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
     });
     $$('.orow .del', page).forEach(function (b) {
-      b.onclick = function () { D.deleteSale(b.dataset.id); renderReports(); toast(t('saved')); };
+      b.onclick = function () {
+        D.deleteSaleRemote(b.dataset.id, function (err) {
+          if (err) { toast(t('needsConnection'), true); return; }
+          renderReports(true); toast(t('saved'));
+        });
+      };
     });
   }
   function statCard(mod, ic, k, v, cur) {
@@ -653,9 +681,13 @@
     return out.join('');
   }
 
-  function renderExpenses() {
+  function renderExpenses(fromSync) {
     var page = $('#page-expenses');
     if (!state.expMonth) state.expMonth = currentMonth();
+    // Cache paints first; the server's copy follows if it differs.
+    if (!fromSync) D.refreshExpenses(function (err, changed) {
+      if (!err && changed && state.route === 'expenses') renderExpenses(true);
+    });
     var mk = state.expMonth === 'all' ? null : state.expMonth;
     var fin = D.finance(mk);
     $('#pageSub').textContent = state.expMonth === 'all' ? t('allTime') : monthLabelText(state.expMonth);
@@ -670,7 +702,7 @@
     '</select></div>';
 
     // revenue / expenses / net profit
-    html += '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:22px">' +
+    html += '<div class="stat-grid fin-grid">' +
       statCard('', 'coins', t('revenue'), D.money(fin.revenue, state.lang), cur()) +
       statCard('', 'wallet', t('totalExpenses'), D.money(fin.expenses, state.lang), cur()) +
       '<div class="stat hero"><div class="ico">' + icon('coins') + '</div><div class="k">' + t('netProfit') + '</div>' +
@@ -709,19 +741,33 @@
     html += '</div>';
     page.innerHTML = html;
 
-    // bindings
+    // bindings — expense edits live on the server (back-office work needs a
+    // connection; only the till itself is offline-safe)
+    var offlineToast = function () { toast(t('needsConnection'), true); };
     $('#expMonthSel').onchange = function () { state.expMonth = this.value; renderExpenses(); };
     $('#addExpense').onclick = function () {
       var day = (state.expMonth === 'all' || state.expMonth === currentMonth()) ? D.dayKey() : state.expMonth + '-01';
-      D.addExpense({ day: day, category: 'salary', desc: '', amount: 0 });
-      renderExpenses();
-      var first = $('#expList .exp-row'); if (first) { first.scrollIntoView({ block: 'center' }); var a = $('[data-f="amount"]', first); if (a) a.focus(); }
+      D.addExpenseRemote({ day: day, category: 'salary', desc: '', amount: 0 }, function (err) {
+        if (err) { offlineToast(); return; }
+        renderExpenses(true);
+        var first = $('#expList .exp-row'); if (first) { first.scrollIntoView({ block: 'center' }); var a = $('[data-f="amount"]', first); if (a) a.focus(); }
+      });
     };
     $('#addExpCat').onclick = function () {
-      var name = prompt(t('newCatPrompt')); if (name && name.trim()) { D.addExpenseCat(name.trim()); renderExpenses(); toast(t('saved')); }
+      var name = prompt(t('newCatPrompt'));
+      if (name && name.trim()) D.addExpenseCatRemote(name.trim(), function (err) {
+        if (err) { offlineToast(); return; }
+        renderExpenses(true); toast(t('saved'));
+      });
     };
     $$('.cat-chip-del', page).forEach(function (b) {
-      b.onclick = function () { if (confirm(t('deleteCatConfirm'))) { D.deleteExpenseCat(b.dataset.cat); renderExpenses(); toast(t('saved')); } };
+      b.onclick = function () {
+        if (!confirm(t('deleteCatConfirm'))) return;
+        D.deleteExpenseCatRemote(b.dataset.cat, function (err) {
+          if (err) { offlineToast(); return; }
+          renderExpenses(true); toast(t('saved'));
+        });
+      };
     });
     $('#dlExcel').onclick = function () { download('khamra-expenses-' + (state.expMonth || 'all') + '.xls', expensesToExcel(mk), 'application/vnd.ms-excel'); };
     $$('#expList .exp-row').forEach(function (row) {
@@ -729,13 +775,21 @@
       $$('[data-f]', row).forEach(function (inp) {
         inp.onchange = function () {
           var patch = {}; patch[inp.dataset.f] = inp.value;
-          D.updateExpense(id, patch);
-          if (inp.dataset.f === 'amount' || inp.dataset.f === 'day') renderExpenses();
+          D.updateExpenseRemote(id, patch, function (err) {
+            if (err) { offlineToast(); renderExpenses(true); return; }   // revert to server truth
+            if (inp.dataset.f === 'amount' || inp.dataset.f === 'day') renderExpenses(true);
+          });
         };
       });
     });
     $$('.exp-del', page).forEach(function (b) {
-      b.onclick = function () { if (confirm(t('deleteExpenseConfirm'))) { D.deleteExpense(b.dataset.del); renderExpenses(); toast(t('saved')); } };
+      b.onclick = function () {
+        if (!confirm(t('deleteExpenseConfirm'))) return;
+        D.deleteExpenseRemote(b.dataset.del, function (err) {
+          if (err) { offlineToast(); return; }
+          renderExpenses(true); toast(t('saved'));
+        });
+      };
     });
   }
 
@@ -831,14 +885,19 @@
     $$('[data-setlang]', page).forEach(function (b) { b.onclick = function () { setLang(b.dataset.setlang); }; });
     $('#savePin').onclick = saveNewPin;
     $('#saveMenu').onclick = saveMenuEdits;
-    $('#resetMenu').onclick = function () { if (confirm(t('resetMenuConfirm'))) { D.resetMenu(); renderSettings(); renderProducts(); toast(t('saved')); } };
+    $('#resetMenu').onclick = function () {
+      if (!confirm(t('resetMenuConfirm'))) return;
+      D.resetMenu();
+      pushMenu(D.getMenu());
+    };
     // add a new blank item
     $('#addItem').onclick = function () {
       var m = collectMenuEdits();
       m.push({ id: 'item' + Date.now().toString(36), ar: '', en: '', price: 0, category: 'drinks', icon: 'cup', photo: null });
-      D.saveMenu(m); renderSettings(); renderProducts();
-      var rows = $$('#menuEdit .medit-row'); var last = rows[rows.length - 1];
-      if (last) { last.scrollIntoView({ block: 'center' }); var f = $('[data-f="ar"]', last); if (f) f.focus(); }
+      pushMenu(m, function () {
+        var rows = $$('#menuEdit .medit-row'); var last = rows[rows.length - 1];
+        if (last) { last.scrollIntoView({ block: 'center' }); var f = $('[data-f="ar"]', last); if (f) f.focus(); }
+      });
     };
     // delete an item
     $$('.medit-del', page).forEach(function (b) {
@@ -846,7 +905,7 @@
         var m = collectMenuEdits(); var i = +b.dataset.del;
         var nm = (m[i] && (m[i].ar || m[i].en)) || '';
         if (!confirm(t('deleteItemConfirm') + (nm ? ' (' + nm + ')' : ''))) return;
-        m.splice(i, 1); D.saveMenu(m); renderSettings(); renderProducts(); toast(t('saved'));
+        m.splice(i, 1); pushMenu(m);
       };
     });
 
@@ -866,7 +925,7 @@
       b.onclick = function (e) {
         e.stopPropagation();
         var m = collectMenuEdits(); m[+b.dataset.rm].photo = null;
-        D.saveMenu(m); renderSettings(); renderProducts(); toast(t('saved'));
+        pushMenu(m);
       };
     });
     fileInput.onchange = function () {
@@ -874,14 +933,30 @@
       var idx = +fileInput.dataset.idx;
       resizeImage(f, 560, function (dataUrl) {
         var m = collectMenuEdits(); m[idx].photo = dataUrl;
+        // local write first — it doubles as the device-quota check
         if (!D.saveMenu(m)) { toast(state.lang === 'ar' ? 'الصورة كبيرة جداً' : 'Image too large'); return; }
-        renderSettings(); renderProducts(); toast(t('saved'));
+        pushMenu(m);
       });
     };
-    $('#exportCsv').onclick = function () { download('khamra-sales-' + D.dayKey() + '.csv', D.salesToCSV(), 'text/csv'); };
-    $('#backupJson').onclick = function () { download('khamra-backup-' + D.dayKey() + '.json', D.backupJSON(), 'application/json'); };
+    // Exports pull the server's copy first so the file reflects every device,
+    // and fall back to the cache when offline.
+    $('#exportCsv').onclick = function () {
+      D.refreshSales(function () { download('khamra-sales-' + D.dayKey() + '.csv', D.salesToCSV(), 'text/csv'); });
+    };
+    $('#backupJson').onclick = function () {
+      D.refreshSales(function () { D.refreshExpenses(function () {
+        download('khamra-backup-' + D.dayKey() + '.json', D.backupJSON(), 'application/json');
+      }); });
+    };
     $('#importJson').onclick = pickBackupFile;
-    $('#clearData').onclick = function () { if (confirm(t('clearConfirm'))) { D.clearSales(); toast(t('saved')); if (state.route === 'reports') renderReports(); } };
+    $('#clearData').onclick = function () {
+      if (!confirm(t('clearConfirm'))) return;
+      D.clearSalesRemote(function (err) {
+        if (err) { toast(t('needsConnection'), true); return; }
+        toast(t('saved'));
+        if (state.route === 'reports') renderReports(true);
+      });
+    };
   }
 
   // ----- Import a backup file (merge) -----
@@ -904,42 +979,45 @@
     var r = new FileReader();
     r.onerror = function () { toast(t('importBadFile'), true); };
     r.onload = function () {
-      var res;
-      try {
-        res = D.importBackup(String(r.result));
-      } catch (e) {
-        toast(t('importBadFile'), true);
-        return;
-      }
-      var a = res.added;
-      var total = a.menu + a.sales + a.expenses + a.cats;
-      if (!total) { toast(t('importNothing')); return; }
-      // Say what actually landed — a silent "done" hides a half-read file.
-      var parts = [];
-      if (a.sales) parts.push(D.num(a.sales, state.lang) + ' ' + t('orders'));
-      if (a.expenses) parts.push(D.num(a.expenses, state.lang) + ' ' + t('navExpenses'));
-      if (a.menu) parts.push(D.num(a.menu, state.lang) + ' ' + t('items'));
-      if (a.cats) parts.push(D.num(a.cats, state.lang) + ' ' + t('category'));
-      var msg = t('importAdded') + ': ' + parts.join('، ');
-      if (res.skipped) msg += ' (' + D.num(res.skipped, state.lang) + ' ' + t('importSkipped') + ')';
-      toast(msg);
-      // Everything downstream of the merge needs redrawing.
-      renderSettings(); renderProducts();
-      if (state.route === 'reports') renderReports();
-      if (state.route === 'expenses') renderExpenses();
-      if (state.route === 'inventory') renderInventory();
+      // The merge happens in the central DB now; the callback has already
+      // pulled the merged truth back into the local cache.
+      D.importBackupRemote(String(r.result), function (err, res) {
+        if (err === 'network') { toast(t('needsConnection'), true); return; }
+        if (err) { toast(t('importBadFile'), true); return; }
+        var a = res.added;
+        var total = a.menu + a.sales + a.expenses + a.cats;
+        if (!total) { toast(t('importNothing')); return; }
+        // Say what actually landed — a silent "done" hides a half-read file.
+        var parts = [];
+        if (a.sales) parts.push(D.num(a.sales, state.lang) + ' ' + t('orders'));
+        if (a.expenses) parts.push(D.num(a.expenses, state.lang) + ' ' + t('navExpenses'));
+        if (a.menu) parts.push(D.num(a.menu, state.lang) + ' ' + t('items'));
+        if (a.cats) parts.push(D.num(a.cats, state.lang) + ' ' + t('category'));
+        var msg = t('importAdded') + ': ' + parts.join('، ');
+        if (res.skipped) msg += ' (' + D.num(res.skipped, state.lang) + ' ' + t('importSkipped') + ')';
+        toast(msg);
+        // Everything downstream of the merge needs redrawing.
+        renderSettings(); renderProducts();
+        if (state.route === 'reports') renderReports(true);
+        if (state.route === 'expenses') renderExpenses(true);
+        if (state.route === 'inventory') renderInventory();
+      });
     };
     r.readAsText(file);
   }
 
   function saveNewPin() {
     var cur = $('#curPin').value, nw = $('#newPin').value, cf = $('#confPin').value;
-    if (!D.verifyPin(cur)) { toast(t('wrongPin'), true); return; }
     if (!/^\d{6}$/.test(nw)) { toast(t('pinLen'), true); return; }
     if (nw !== cf) { toast(t('pinMismatch'), true); return; }
-    D.setPin(nw); toast(t('pinChanged'));
-    $('#curPin').value = $('#newPin').value = $('#confPin').value = '';
-    renderSettings();
+    // The server is the judge of the current PIN now.
+    D.setPinRemote(cur, nw, function (err) {
+      if (err === 'wrongPin') { toast(t('wrongPin'), true); return; }
+      if (err) { toast(t('needsConnection'), true); return; }
+      toast(t('pinChanged'));
+      $('#curPin').value = $('#newPin').value = $('#confPin').value = '';
+      renderSettings();
+    });
   }
   // Reads the current values from the editor inputs into the menu array
   // (without saving) so photo changes never discard pending text edits.
@@ -964,8 +1042,16 @@
       if (!(parseFloat(pr.value) > 0)) { pr.classList.add('invalid'); bad++; }
     });
     if (bad) { toast(t('fillAll')); return; }
-    D.saveMenu(collectMenuEdits()); toast(t('saved'));
-    renderProducts();
+    pushMenu(collectMenuEdits());
+  }
+  // Menu edits live on the server (shared across devices). On failure the
+  // re-render falls back to the cached server truth, so the UI never lies.
+  function pushMenu(m, after) {
+    D.saveMenuRemote(m, function (err) {
+      if (err) toast(t('needsConnection'), true); else toast(t('saved'));
+      renderSettings(); renderProducts();
+      if (!err && after) after();
+    });
   }
 
   // Downscale + JPEG-compress an uploaded image so it fits comfortably in
@@ -1081,6 +1167,20 @@
     cd.textContent = now.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' });
   }
 
+  // Topbar chip: hidden when everything is synced; "N to sync" while the
+  // outbox drains; "Offline · N" when the server can't be reached.
+  function updateSyncChip() {
+    var chip = $('#syncChip'); if (!chip) return;
+    var pending = D.pendingCount();
+    if (!D.isOnline()) {
+      chip.className = 'sync-chip on off';
+      chip.textContent = t('offlineChip') + (pending ? ' · ' + D.num(pending, state.lang) : '');
+    } else if (pending) {
+      chip.className = 'sync-chip on pend';
+      chip.textContent = D.num(pending, state.lang) + ' ' + t('toSync');
+    } else chip.className = 'sync-chip';
+  }
+
   // =====================================================================
   // INIT
   // =====================================================================
@@ -1104,6 +1204,12 @@
     });
     // modal dismiss on backdrop
     $('#modalBg').onclick = function (e) { if (e.target === $('#modalBg')) closeModal(); };
+    // server sync: status chip, background outbox flush, and a bounce back to
+    // the lock screen if the server session expires mid-shift
+    D.onSync(updateSyncChip);
+    D.onAuthLost(function () { lockApp(); });
+    D.startSync();
+    updateSyncChip();
     // clock
     updateClock(); setInterval(updateClock, 30000);
     // start locked

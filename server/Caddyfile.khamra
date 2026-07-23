@@ -1,0 +1,22 @@
+# Khamra POS — appended to /opt/spintt-academy/Caddyfile by vps-setup.sh.
+# sslip.io resolves this hostname to the VPS; Caddy provisions the Let's
+# Encrypt certificate (chain verified iOS-12-trusted for the booth iPad).
+khamra.38.54.116.48.sslip.io {
+	encode gzip
+
+	# app + API live in one container; overwrite X-Forwarded-For with the
+	# real client IP so login rate-limiting can't be spoofed
+	reverse_proxy khamra-api:8792 {
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+		-X-Powered-By
+	}
+}

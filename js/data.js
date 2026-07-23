@@ -15,7 +15,9 @@
     seq: 'khamra.orderSeq',
     pinV: 'khamra.pinVersion',
     expenses: 'khamra.expenses',
-    expenseCats: 'khamra.expenseCats'
+    expenseCats: 'khamra.expenseCats',
+    outbox: 'khamra.outbox',          // sales recorded offline, waiting to reach the server
+    pinDefault: 'khamra.pinDefault'   // server's "still on the default PIN" flag, cached
   };
 
   // --- Default menu (from the booth menu, bilingual) --------------------
@@ -142,6 +144,11 @@
       }
     });
     if (changed) saveMenu(menu);
+    // Queue for the server. The sale is safe on-device either way; the sync
+    // loop pushes it up and the server's idempotency (keyed on rec.id) makes
+    // replays harmless.
+    outboxPush(rec);
+    syncSoon();
     return rec;
   }
 
@@ -433,6 +440,12 @@
     importNothing:  { ar: 'لا يوجد جديد في هذا الملف', en: 'Nothing new in that file' },
     importAdded:    { ar: 'تمت الإضافة', en: 'Added' },
     importSkipped:  { ar: 'سجلات متجاهلة', en: 'skipped' },
+    // Server sync
+    offlineMode:    { ar: 'وضع عدم الاتصال — تُحفَظ المبيعات على هذا الجهاز وتُرفَع تلقائياً عند عودة الاتصال', en: 'Offline — sales are saved on this device and upload automatically when back online' },
+    needsConnection:{ ar: 'يتطلب اتصالاً بالخادم — حاول عند عودة الإنترنت', en: 'Needs a server connection — try again when back online' },
+    rateLimited:    { ar: 'محاولات كثيرة — انتظر ١٠ دقائق', en: 'Too many attempts — wait 10 minutes' },
+    offlineChip:    { ar: 'غير متصل', en: 'Offline' },
+    toSync:         { ar: 'بانتظار الرفع', en: 'to sync' },
     clearData:      { ar: 'مسح كل المبيعات', en: 'Clear all sales' },
     clearConfirm:   { ar: 'سيتم حذف كل سجل المبيعات نهائياً. متابعة؟', en: 'This will permanently delete all sales history. Continue?' },
     defaultPinWarn: { ar: 'أنت تستخدم الرمز الافتراضي 123456 — يُنصح بتغييره.', en: 'You are using the default PIN 123456 — please change it.' },
@@ -584,6 +597,248 @@
     return !!e && typeof e.id === 'string' && typeof e.day === 'string' && isFinite(e.amount);
   }
 
+  // =====================================================================
+  // SERVER SYNC
+  // The server (js served same-origin at /api) owns the data. localStorage
+  // becomes the till's working cache: menu + settings so it can sell with no
+  // connection, plus an outbox of sales waiting to upload. Everything here is
+  // ES5 + XHR because the booth iPad is iOS 12 Safari.
+  // =====================================================================
+  var API = '/api';
+  var online = true;                 // optimistic until a request says otherwise
+  var syncSubs = [], authLostFn = null, syncing = false, syncTimerId = null;
+
+  function isOnline() { return online; }
+  function onSync(fn) { syncSubs.push(fn); }
+  function onAuthLost(fn) { authLostFn = fn; }
+  function notify() {
+    for (var i = 0; i < syncSubs.length; i++) {
+      try { syncSubs[i]({ online: online, pending: pendingCount() }); } catch (e) {}
+    }
+  }
+  function setOnline(b) { if (online !== b) { online = b; notify(); } }
+
+  // cb(err, data, httpStatus). err 'network' = couldn't reach the server at all.
+  function req(method, path, body, cb, timeoutMs) {
+    var x = new XMLHttpRequest();
+    x.open(method, API + path, true);
+    x.timeout = timeoutMs || 12000;
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status === 0) { setOnline(false); cb('network', null, 0); return; }
+      setOnline(true);
+      var data = null;
+      try { data = JSON.parse(x.responseText || 'null'); } catch (e) {}
+      if (x.status >= 200 && x.status < 300) { cb(null, data, x.status); return; }
+      // An expired session anywhere but the login call bounces the app to the lock screen.
+      if (x.status === 401 && path !== '/login' && authLostFn) authLostFn();
+      cb((data && data.error) || ('http' + x.status), data, x.status);
+    };
+    try { x.send(body != null ? JSON.stringify(body) : null); }
+    catch (e) { setOnline(false); cb('network', null, 0); }
+  }
+
+  // --- Outbox (sales recorded while offline) ---------------------------
+  function readOutbox() { return read(KEYS.outbox, []); }
+  function outboxPush(rec) { var b = readOutbox(); b.push(rec); write(KEYS.outbox, b); notify(); }
+  function outboxRemove(id) { write(KEYS.outbox, readOutbox().filter(function (r) { return r.id !== id; })); notify(); }
+  function pendingCount() { return readOutbox().length; }
+
+  function fixLocalSaleNo(id, no) {
+    var sales = getSales();
+    var s = sales.filter(function (x) { return x.id === id; })[0];
+    if (s && s.no !== no) { s.no = no; write(KEYS.sales, sales); }
+    if (no > (read(KEYS.seq, 0) | 0)) write(KEYS.seq, no);
+  }
+
+  // Push queued sales up, one at a time, oldest first. Stops (and retries
+  // later) on connection/auth/server trouble; drops only records the server
+  // definitively rejected as invalid, so nothing valid is ever lost.
+  function syncNow(cb) {
+    if (syncing) { if (cb) cb(null); return; }
+    var box = readOutbox();
+    if (!box.length) { notify(); if (cb) cb(null); return; }
+    syncing = true;
+    var i = 0;
+    function step() {
+      if (i >= box.length) { syncing = false; notify(); if (cb) cb(null); return; }
+      var rec = box[i];
+      req('POST', '/sales', { sale: rec }, function (err, data, status) {
+        // Transient (offline, session expired, server trouble) — and 404/405,
+        // which mean "no API at this host" (e.g. a static-hosted copy): keep
+        // the sale queued and retry later. Never drop a sale for those.
+        if (err && (status === 0 || status === 401 || status === 404 || status === 405 || status >= 500)) {
+          syncing = false; notify(); if (cb) cb(err); return;
+        }
+        outboxRemove(rec.id);                                    // synced, or definitively invalid
+        if (!err && data && data.sale && data.sale.no !== rec.no) fixLocalSaleNo(rec.id, data.sale.no);
+        i++; step();
+      });
+    }
+    step();
+  }
+  function syncSoon() { setTimeout(function () { syncNow(); }, 50); }
+  function startSync() {
+    if (syncTimerId) return;
+    syncTimerId = setInterval(function () { if (pendingCount()) syncNow(); }, 20000);
+    if (global.addEventListener) global.addEventListener('online', function () { syncNow(); });
+  }
+
+  // --- Login / bootstrap -----------------------------------------------
+  // The PIN is verified by the server. If the server is unreachable, the
+  // cached PIN opens the till anyway — an internet cut must never stop sales.
+  function login(pin, cb) {
+    req('POST', '/login', { pin: String(pin) }, function (err, data, status) {
+      if (!err) {
+        setPin(pin);                    // keep the offline fallback in step with the server PIN
+        bootstrap(function () { syncSoon(); cb(null, { offline: false }); });
+      } else if (err === 'wrongPin' || err === 'rateLimited') {
+        cb(err);                        // a real server answered — believe it
+      } else {
+        // Unreachable, 404 (static host with no API), or a 5xx: fall back to
+        // the cached PIN so a broken server can never lock the till.
+        if (verifyPin(pin)) cb(null, { offline: true });
+        else cb('wrongPin');
+      }
+    }, 5000);
+  }
+
+  function bootstrap(cb) {
+    req('GET', '/bootstrap', null, function (err, data) {
+      if (err) { if (cb) cb(err); return; }
+      write(KEYS.pinDefault, data.pinIsDefault ? '1' : '0');
+      var local = getMenu();
+      if ((!data.menu || !data.menu.length) && local.length) {
+        // Fresh server — seed it with this device's menu (defaults or migrated).
+        req('PUT', '/menu', { menu: local }, function () { if (cb) cb(null); });
+        return;
+      }
+      if (data.menu && data.menu.length) write(KEYS.menu, data.menu);
+      if (cb) cb(null);
+    });
+  }
+
+  function isDefaultPinCached() {
+    var f = read(KEYS.pinDefault, null);
+    if (f === '1') return true;
+    if (f === '0') return false;
+    return isDefaultPin();
+  }
+
+  // --- Pull server truth into the cache --------------------------------
+  function refreshSales(cb) {
+    req('GET', '/sales', null, function (err, data) {
+      if (err) { if (cb) cb(err); return; }
+      var server = (data && data.sales) || [];
+      var have = {};
+      server.forEach(function (s) { have[s.id] = 1; });
+      var queued = readOutbox().filter(function (s) { return !have[s.id]; });
+      var next = server.concat(queued);
+      var changed = JSON.stringify(next) !== JSON.stringify(getSales());
+      if (changed) {
+        write(KEYS.sales, next);
+        var maxNo = read(KEYS.seq, 0) | 0;
+        next.forEach(function (s) { if ((s.no | 0) > maxNo) maxNo = s.no | 0; });
+        write(KEYS.seq, maxNo);
+      }
+      if (cb) cb(null, changed);
+    });
+  }
+
+  function refreshExpenses(cb) {
+    req('GET', '/expenses', null, function (err, data) {
+      if (err) { if (cb) cb(err); return; }
+      var changed = JSON.stringify(data.expenses || []) !== JSON.stringify(getExpenses()) ||
+                    JSON.stringify(data.cats || []) !== JSON.stringify(getExpenseCats());
+      if (changed) { write(KEYS.expenses, data.expenses || []); write(KEYS.expenseCats, data.cats || []); }
+      if (cb) cb(null, changed);
+    });
+  }
+
+  // --- Online-only mutations (back-office; the till itself never blocks) --
+  function saveMenuRemote(menu, cb) {
+    req('PUT', '/menu', { menu: menu }, function (err) {
+      if (!err) saveMenu(menu);
+      if (cb) cb(err);
+    });
+  }
+  function setStockRemote(id, val, cb) {
+    var stock = (val === null || val === '' || (typeof val === 'number' && isNaN(val)))
+      ? null : Math.max(0, Math.floor(Number(val)) || 0);
+    req('PATCH', '/stock', { id: id, stock: stock }, function (err) {
+      if (!err) setStock(id, stock);
+      if (cb) cb(err);
+    });
+  }
+  function addExpenseRemote(e, cb) {
+    req('POST', '/expenses', { expense: e }, function (err, data) {
+      if (!err && data && data.expense) {
+        var list = getExpenses().filter(function (x) { return x.id !== data.expense.id; });
+        list.push(data.expense);
+        list.sort(function (a, b) { return a.ts - b.ts; });
+        write(KEYS.expenses, list);
+      }
+      if (cb) cb(err, data && data.expense);
+    });
+  }
+  function updateExpenseRemote(id, patch, cb) {
+    req('PATCH', '/expenses/' + encodeURIComponent(id), patch, function (err, data) {
+      if (!err && data && data.expense) {
+        var list = getExpenses();
+        for (var i = 0; i < list.length; i++) if (list[i].id === id) list[i] = data.expense;
+        write(KEYS.expenses, list);
+      }
+      if (cb) cb(err);
+    });
+  }
+  function deleteExpenseRemote(id, cb) {
+    req('DELETE', '/expenses/' + encodeURIComponent(id), null, function (err) {
+      if (!err) deleteExpense(id);
+      if (cb) cb(err);
+    });
+  }
+  function addExpenseCatRemote(name, cb) {
+    req('POST', '/cats', { name: name }, function (err, data) {
+      if (!err && data) write(KEYS.expenseCats, data.cats || []);
+      if (cb) cb(err);
+    });
+  }
+  function deleteExpenseCatRemote(name, cb) {
+    req('DELETE', '/cats/' + encodeURIComponent(name), null, function (err, data) {
+      if (!err && data) write(KEYS.expenseCats, data.cats || []);
+      if (cb) cb(err);
+    });
+  }
+  function deleteSaleRemote(id, cb) {
+    req('DELETE', '/sales/' + encodeURIComponent(id), null, function (err) {
+      if (!err) { deleteSale(id); outboxRemove(id); }
+      if (cb) cb(err);
+    });
+  }
+  function clearSalesRemote(cb) {
+    req('DELETE', '/sales', null, function (err) {
+      if (!err) { clearSales(); write(KEYS.outbox, []); notify(); }
+      if (cb) cb(err);
+    });
+  }
+  function setPinRemote(current, next, cb) {
+    req('POST', '/pin', { current: current, next: next }, function (err) {
+      if (!err) { setPin(next); write(KEYS.pinDefault, next === DEFAULT_PIN ? '1' : '0'); }
+      if (cb) cb(err);
+    });
+  }
+  function importBackupRemote(text, cb) {
+    var data;
+    try { data = JSON.parse(text); } catch (e) { cb('parse'); return; }
+    if (!data || typeof data !== 'object') { cb('shape'); return; }
+    req('POST', '/import', data, function (err, res) {
+      if (err) { cb(err); return; }
+      // pull the merged truth back down before reporting success
+      bootstrap(function () { refreshSales(function () { refreshExpenses(function () { cb(null, res); }); }); });
+    });
+  }
+
   // --- Migration --------------------------------------------------------
   // When the PIN scheme changes (e.g. 4-digit → 6-digit), reset the stored PIN
   // to the new default once, so an old incompatible PIN can't lock anyone out.
@@ -598,8 +853,8 @@
   global.Data = {
     KEYS: KEYS,
     DEFAULT_PIN: DEFAULT_PIN,
-    // pin
-    verifyPin: verifyPin, setPin: setPin, isDefaultPin: isDefaultPin,
+    // pin (isDefaultPin prefers the server's cached answer)
+    verifyPin: verifyPin, setPin: setPin, isDefaultPin: isDefaultPinCached,
     // menu
     getMenu: getMenu, saveMenu: saveMenu, resetMenu: resetMenu,
     // inventory
@@ -616,7 +871,17 @@
     getExpenses: getExpenses, addExpense: addExpense, updateExpense: updateExpense, deleteExpense: deleteExpense,
     getExpenseCats: getExpenseCats, addExpenseCat: addExpenseCat, deleteExpenseCat: deleteExpenseCat, finance: finance, expenseMonths: expenseMonths, monthOf: monthOf,
     // export / import
-    salesToCSV: salesToCSV, backupJSON: backupJSON, importBackup: importBackup
+    salesToCSV: salesToCSV, backupJSON: backupJSON, importBackup: importBackup,
+    // server sync
+    login: login, bootstrap: bootstrap, startSync: startSync, syncNow: syncNow,
+    refreshSales: refreshSales, refreshExpenses: refreshExpenses,
+    isOnline: isOnline, pendingCount: pendingCount, onSync: onSync, onAuthLost: onAuthLost,
+    saveMenuRemote: saveMenuRemote, setStockRemote: setStockRemote,
+    addExpenseRemote: addExpenseRemote, updateExpenseRemote: updateExpenseRemote,
+    deleteExpenseRemote: deleteExpenseRemote,
+    addExpenseCatRemote: addExpenseCatRemote, deleteExpenseCatRemote: deleteExpenseCatRemote,
+    deleteSaleRemote: deleteSaleRemote, clearSalesRemote: clearSalesRemote,
+    setPinRemote: setPinRemote, importBackupRemote: importBackupRemote
   };
 
 })(window);

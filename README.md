@@ -1,8 +1,14 @@
 # خمرة · Khamra POS
 
 A clean, premium point‑of‑sale for the **Khamra (خمرة) specialty‑tea booth**.
-Bilingual (Arabic / English), works fully **offline**, and stores every sale
-locally on the device — no internet, server, or install required.
+Bilingual (Arabic / English) and responsive — the till runs on the booth iPad,
+and reports open on any phone or laptop with the link.
+
+The data lives in a **central server database** (`server/` — Node + SQLite,
+one container). The till keeps a local cache and an **offline sales queue**,
+so an internet cut never stops selling: sales wait on the device and upload
+automatically when the connection returns. The PIN is verified by the server
+(with a cached fallback so an outage can't lock the booth out).
 
 ![brand](assets/logo.png)
 
@@ -100,8 +106,22 @@ symbol lives at `assets/omr.svg` — replace that one file to update it everywhe
 
 ## Where the data lives
 
-Menu, settings, sales, expenses and stock counts all live in the browser's
-**localStorage** on the device — private and offline.
+Menu, stock, sales, expenses and categories live in the **server's SQLite
+database** — every device with the link sees the same numbers, and clearing a
+browser loses nothing. Each device keeps a localStorage **cache** (so the till
+sells offline) plus a queue of sales waiting to upload; order numbers are
+assigned by the server, so two devices can never issue the same number.
+
+### Run it
+
+```bash
+DEV=1 node server/server.js     # → http://localhost:8792 (app + API together)
+```
+
+Production mirrors this exactly: the `khamra-api` container serves app + API
+behind Caddy (HTTPS). One‑time VPS setup: `server/vps-setup.sh`. Updates:
+`./deploy.sh` — refuses uncommitted/unpushed work, rebuilds, health‑checks.
+Nightly DB snapshots land in `/opt/khamra-pos/backups` (30 kept).
 
 ### Backup & restore
 
@@ -147,9 +167,12 @@ it (background removed; a light variant for the dark lock screen).
 
 ```
 index.html        app shell + icons
-css/styles.css    theme & layout (tea palette)
-js/data.js        storage, menu, stock, expenses, currency, analytics, i18n
+css/styles.css    theme & layout (tea palette) + phone layer
+js/data.js        cache, sync engine + offline queue, currency, analytics, i18n
 js/app.js         PIN gate, sale flow, inventory, reports, expenses, settings
-sw.js             service worker — offline cache (bump CACHE to push updates)
+sw.js             service worker — offline shell cache (never touches /api)
+server/server.js  the API + static host — Node + SQLite, single file, no deps
+server/           Dockerfile, compose, Caddy vhost, vps-setup.sh, backup.sh
+deploy.sh         push-then-deploy to the VPS with health checks
 assets/           brand logo (dark + light)
 ```

@@ -1,0 +1,11 @@
+# Keep the image lean and the served tree clean — none of this belongs
+# on a public URL or in the container.
+.git
+.gitignore
+.dockerignore
+server/*.db
+server/*.db-*
+logo.pdf
+Menu.jpeg
+FutureLine signature.png
+menu picture

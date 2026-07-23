@@ -1,14 +1,16 @@
-# Khamra POS API — joins the VPS's shared Caddy network so the Caddyfile can
-# reverse-proxy khamra.38.54.116.48.sslip.io/api/* -> khamra-api:8792.
+# Khamra POS — joins the VPS's shared Caddy network; the Caddyfile proxies
+# khamra.38.54.116.48.sslip.io -> khamra-api:8792 (app + API, one container).
 # The port is NOT published to the host: Caddy is the only way in.
 services:
   khamra-api:
-    build: .
+    build:
+      context: ..                # repo root — the image carries the static app
+      dockerfile: server/Dockerfile
     image: khamra-api
     container_name: khamra-api
     restart: unless-stopped
     environment:
-      TZ: Asia/Muscat          # business "day" boundaries follow booth time
+      TZ: Asia/Muscat            # business "day" boundaries follow booth time
       DB_PATH: /data/khamra.db
     volumes:
       - khamra_data:/data

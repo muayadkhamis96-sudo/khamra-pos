@@ -22,6 +22,15 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;   // one booth shift
 const MAX_BODY = 20 * 1024 * 1024;            // import/menu carry base64 photos
 const LOGIN_MAX = 8, LOGIN_WINDOW_MS = 10 * 60 * 1000;
 
+// This process serves the static app too (SERVE_STATIC=1 in the container,
+// DEV=1 locally) — one origin for app + API everywhere; in production Caddy
+// terminates HTTPS in front and proxies the whole hostname here.
+// Cookies drop the Secure flag only in DEV, because localhost is plain http.
+const DEV = !!process.env.DEV;
+const SERVE_STATIC = DEV || !!process.env.SERVE_STATIC;
+const APP_ROOT = path.join(__dirname, '..');
+const COOKIE_FLAGS = '; Path=/; HttpOnly; SameSite=Lax' + (DEV ? '' : '; Secure');
+
 // --- Database ----------------------------------------------------------
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new DatabaseSync(DB_PATH);
@@ -151,14 +160,14 @@ const routes = {
     attempts.delete(ip);
     const sid = createSession();
     send(res, 200, { ok: true }, {
-      'Set-Cookie': 'khamra_sid=' + sid + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + (SESSION_TTL_MS / 1000)
+      'Set-Cookie': 'khamra_sid=' + sid + COOKIE_FLAGS + '; Max-Age=' + (SESSION_TTL_MS / 1000)
     });
   },
 
   'POST /api/logout': (req, res) => {
     const sid = cookieOf(req);
     if (sid) db.prepare('DELETE FROM sessions WHERE id = ?').run(sid);
-    send(res, 200, { ok: true }, { 'Set-Cookie': 'khamra_sid=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' });
+    send(res, 200, { ok: true }, { 'Set-Cookie': 'khamra_sid=' + COOKIE_FLAGS + '; Max-Age=0' });
   },
 
   // Everything the till needs to boot and sell.
@@ -367,10 +376,34 @@ function dynamicRoute(method, pathname, req, res) {
 
 const PUBLIC = { 'GET /api/health': 1, 'POST /api/login': 1 };
 
+// --- DEV static serving (production: Caddy does this) -------------------
+const MIME = { html: 'text/html; charset=utf-8', js: 'application/javascript; charset=utf-8',
+               css: 'text/css; charset=utf-8', json: 'application/json', png: 'image/png',
+               jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', ico: 'image/x-icon',
+               pdf: 'application/pdf', txt: 'text/plain; charset=utf-8', woff2: 'font/woff2' };
+function serveStatic(res, pathname) {
+  let p = decodeURIComponent(pathname);
+  if (p === '/' || p === '') p = '/index.html';
+  // never serve dotfiles or the server dir (the DB lives there in dev)
+  if (p.includes('..') || p.includes('/.') || p.startsWith('/server')) return send(res, 404, { error: 'notFound' });
+  const file = path.join(APP_ROOT, p);
+  if (!file.startsWith(APP_ROOT)) return send(res, 404, { error: 'notFound' });
+  fs.readFile(file, (err, buf) => {
+    if (err) return send(res, 404, { error: 'notFound' });
+    const ext = path.extname(file).slice(1).toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    res.end(buf);
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://local');
   const key = req.method + ' ' + url.pathname;
   try {
+    if (!url.pathname.startsWith('/api/')) {
+      if (SERVE_STATIC && req.method === 'GET') return serveStatic(res, url.pathname);
+      return send(res, 404, { error: 'notFound' });
+    }
     const needsAuth = !PUBLIC[key];
     if (needsAuth && !sessionValid(cookieOf(req))) return send(res, 401, { error: 'unauthorized' });
     const handler = routes[key];

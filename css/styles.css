@@ -798,3 +798,85 @@ button, .card-product, .nav-btn, .cat-tab, .key, .pay-opt,
   .order-empty > * + * { margin-top: 14px; }
   .pay-opt > * + * { margin-top: 10px; }
 }
+
+/* Finance summary on the Expenses screen: 3 across, stacked on phones */
+.fin-grid { grid-template-columns: repeat(3, 1fr); margin-bottom: 22px; }
+
+/* ============================================================
+   SERVER SYNC CHIP (topbar)
+   Hidden when synced; amber while the outbox drains; red offline.
+   ============================================================ */
+.sync-chip { display: none; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.sync-chip.on { display: inline-block; }
+.sync-chip.pend { background: rgba(213,154,85,0.18); color: #8a5a1f; border: 1px solid rgba(185,116,47,0.35); }
+.sync-chip.off { background: rgba(180,80,63,0.12); color: var(--danger); border: 1px solid rgba(180,80,63,0.3); }
+
+/* ============================================================
+   PHONES (≤ 640px) — "any device with the link"
+   The booth iPad (iOS 12) is 768pt wide and never enters this layer,
+   so modern CSS is safe here. The side rail becomes a bottom tab bar.
+   ============================================================ */
+@media (max-width: 640px) {
+  :root { --bnav-h: calc(58px + env(safe-area-inset-bottom)); }
+
+  /* nav: fixed bottom bar */
+  .nav {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    width: 100%; height: var(--bnav-h);
+    flex-direction: row; align-items: stretch; justify-content: space-around;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    gap: 4px; z-index: 40;
+    box-shadow: 0 -6px 20px rgba(46,26,13,0.25);
+  }
+  .nav > * + * { margin-top: 0; }        /* undo the column-gap fallback */
+  .nav-logo, .nav-spacer { display: none; }
+  .nav-btn { flex: 1; padding: 6px 2px; border-radius: 12px; }
+  .nav-btn svg { width: 22px; height: 22px; }
+
+  /* content clears the bar */
+  .main { height: 100%; }
+  .page.scroll { padding-bottom: calc(24px + var(--bnav-h)); }
+  .pos-products { padding-bottom: calc(30px + var(--bnav-h)); }
+  .main-sign { margin-bottom: calc(90px + var(--bnav-h)); }
+
+  /* order sheet peeks above the bar */
+  .order { bottom: var(--bnav-h); }
+  .order-foot { padding-bottom: 18px; }
+
+  /* topbar: tighter; the clock goes, the sync chip stays */
+  .topbar { padding: 14px 16px 10px; padding-top: calc(12px + env(safe-area-inset-top)); }
+  .topbar h1 { font-size: 20px; }
+  .topbar .sub { font-size: 12px; }
+  .clock { display: none; }
+
+  /* grid/flex items default to min-width:auto and can stretch their track
+     past the viewport — let every panel column shrink, and never scroll x */
+  .panels > * { min-width: 0; }
+  .rank .info { min-width: 0; }
+  .page.scroll { overflow-x: hidden; }
+
+  /* stats: keep titles clear of the corner icon; slightly smaller numbers */
+  .stat .k { padding-inline-end: 46px; }
+  .stat .v { font-size: 26px; }
+
+  /* 7-day chart: let all seven columns squeeze in */
+  .chart { gap: 4px; }
+  .bar-col { min-width: 0; }
+  .bar-col .bd { font-size: 9.5px; white-space: nowrap; }
+  .bar .bv { display: none; }   /* value bubbles don't fit on phone bars */
+
+  /* product cards: name above price — side by side they wrap letter-by-letter */
+  .card-product .meta { flex-direction: column; align-items: flex-start; padding: 10px 12px 12px; gap: 2px; }
+  .card-product .name-ar { font-size: 16px; }
+  .card-product .price { font-size: 15px; }
+
+  /* finance cards stack — three across is unreadable at this width */
+  .fin-grid { grid-template-columns: 1fr; }
+
+  /* inventory rows stack their controls */
+  .inv-row { flex-wrap: wrap; }
+  .inv-ctrl { width: 100%; justify-content: flex-end; }
+
+  /* modals hug small screens */
+  .modal { padding: 22px; }
+}

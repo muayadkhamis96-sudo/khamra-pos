@@ -2,15 +2,15 @@
    Precaches the app on install, then serves cache-first so it works fully
    offline. Anything fetched while online (incl. Google Fonts) is cached too.
    Bump CACHE when you change app files to force the iPad to pull the update. */
-var CACHE = 'khamra-v22';
+var CACHE = 'khamra-v24';
 
 var CORE = [
   './',
   'index.html',
   'manifest.json',
-  'css/styles.css?v=22',
-  'js/data.js?v=22',
-  'js/app.js?v=22',
+  'css/styles.css?v=24',
+  'js/data.js?v=24',
+  'js/app.js?v=24',
   'assets/logo.png',
   'assets/logo-light.png',
   'assets/icon-152.png',
@@ -60,6 +60,10 @@ function isShell(req) {
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
   var req = e.request;
+
+  // The API is live data — the service worker must never answer for it.
+  // (Cache-first here would freeze reports/expenses at their first response.)
+  if (req.url.indexOf('/api/') !== -1) return;
 
   if (isShell(req)) {
     e.respondWith(
