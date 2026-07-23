@@ -1,6 +1,9 @@
 # Khamra POS — joins the VPS's shared Caddy network; the Caddyfile proxies
 # khamra.38.54.116.48.sslip.io -> khamra-api:8792 (app + API, one container).
 # The port is NOT published to the host: Caddy is the only way in.
+# Explicit project name: the compose dir is server/, whose default project
+# name ("server") collides with wingy's and scrambles volume names.
+name: khamra
 services:
   khamra-api:
     build:

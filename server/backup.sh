@@ -4,7 +4,7 @@
 set -euo pipefail
 OUT=/opt/khamra-pos/backups
 mkdir -p "$OUT"
-docker run --rm -v khamra_data:/data -v "$OUT":/out alpine \
+docker run --rm -v khamra_khamra_data:/data -v "$OUT":/out alpine \
   sh -c 'cp /data/khamra.db "/out/khamra-$(date +%F).db"'
 ls -1t "$OUT"/khamra-*.db 2>/dev/null | tail -n +31 | xargs -r rm --
 echo "$(date '+%F %T') backup ok"
