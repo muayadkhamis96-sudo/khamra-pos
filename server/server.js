@@ -291,9 +291,16 @@ const routes = {
         const have = new Set(db.prepare('SELECT id FROM menu').all().map(r => r.id));
         let pos = db.prepare('SELECT COALESCE(MAX(pos),-1)+1 AS p FROM menu').get().p;
         const ins = db.prepare('INSERT INTO menu (id, ar, en, price, category, icon, photo, stock, pos) VALUES (?,?,?,?,?,?,?,?,?)');
+        const fillPhoto = db.prepare("UPDATE menu SET photo = ? WHERE id = ? AND (photo IS NULL OR photo = '')");
         data.menu.forEach(m => {
           if (!m || typeof m.id !== 'string') { skipped++; return; }
-          if (have.has(m.id)) return;
+          if (have.has(m.id)) {
+            // Existing item wins — but the very first login seeds the default
+            // menu (photo-less) before the device backup arrives, so backfill
+            // a photo the server doesn't have yet rather than drop it.
+            if (m.photo && fillPhoto.run(String(m.photo), m.id).changes > 0) added.menu++;
+            return;
+          }
           ins.run(m.id, String(m.ar || ''), String(m.en || ''), toB(m.price), String(m.category || 'drinks'),
                   m.icon || null, m.photo || null, (typeof m.stock === 'number') ? Math.max(0, m.stock | 0) : null, pos++);
           have.add(m.id); added.menu++;
