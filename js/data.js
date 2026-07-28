@@ -398,6 +398,16 @@
     lineTotal:      { ar: 'إجمالي السطر', en: 'Line total' },
     orderTotal:     { ar: 'إجمالي الطلب', en: 'Order total' },
     grandTotal:     { ar: 'الإجمالي', en: 'Grand total' },
+    // Excel workbook: sheet names + section headings
+    sheetOverview:  { ar: 'نظرة عامة', en: 'Overview' },
+    sheetRevenue:   { ar: 'الإيرادات', en: 'Revenue' },
+    dailyTotals:    { ar: 'الإجمالي اليومي', en: 'Daily totals' },
+    byMonth:        { ar: 'حسب الشهر', en: 'By month' },
+    byCategory:     { ar: 'حسب الفئة', en: 'By category' },
+    allExpenses:    { ar: 'كل المصاريف', en: 'All expenses' },
+    weekday:        { ar: 'اليوم', en: 'Day' },
+    count:          { ar: 'العدد', en: 'Count' },
+    preparingFile:  { ar: 'جارٍ تجهيز الملف…', en: 'Preparing the file…' },
     // Settings
     language:       { ar: 'اللغة', en: 'Language' },
     arabic:         { ar: 'العربية', en: 'Arabic' },

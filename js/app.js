@@ -439,9 +439,7 @@
 
     page.innerHTML = html;
     $$('[data-scope]', page).forEach(function (b) { b.onclick = function () { state.scope = b.dataset.scope; renderReports(); }; });
-    $('#dlReport').onclick = function () {
-      download('khamra-report-' + (key || 'all-time') + '.xls', reportToExcel(key), 'application/vnd.ms-excel');
-    };
+    $('#dlReport').onclick = downloadWorkbook;
     // tap a day in the chart to view that day's full report
     $$('.bar-col[data-day]', page).forEach(function (b) {
       var pick = function () { var k = b.dataset.day; state.scope = (k === D.dayKey()) ? 'today' : k; renderReports(); };
@@ -573,92 +571,182 @@
   // Covers whatever scope the screen is showing: key = a dayKey, or null = all
   // time. Unlike the on-screen "recent orders" panel this lists every order.
   // Amounts are written as plain numbers (English digits) so Excel can sum them.
-  function reportToExcel(key) {
-    var s = key ? D.statsForDay(key) : D.allTime();
-    var sales = D.getSales().filter(function (x) { return !key || x.day === key; });
-    // Expenses are normally scoped by month, but here they follow the report's
-    // own scope so every number in the file covers the same period.
-    var exps = D.getExpenses().filter(function (e) { return !key || e.day === key; })
-      .sort(function (a, b) { return a.ts - b.ts; });
+  // =====================================================================
+  // EXCEL EXPORT — one workbook, three sheets, always the FULL history
+  // Overview · Revenue (detailed) · Expenses (detailed). Both download
+  // buttons produce this same book, so nothing is ever scoped away: the old
+  // export followed the on-screen period and only ever listed 7 days.
+  // =====================================================================
+
+  // Roll every sale up per day and per month in a single pass.
+  function salesRollup(sales) {
+    var days = {}, months = {}, dayList = [], monthList = [];
+    sales.forEach(function (s) {
+      var d = days[s.day];
+      if (!d) { d = days[s.day] = { key: s.day, orders: 0, items: 0, cash: 0, card: 0, revenue: 0 }; dayList.push(d); }
+      d.orders++; d.items += s.count || 0; d.revenue += s.total;
+      if (s.method === 'card') d.card += s.total; else d.cash += s.total;
+
+      var mk = D.monthOf(s.day), m = months[mk];
+      if (!m) { m = months[mk] = { key: mk, orders: 0, revenue: 0, expenses: 0 }; monthList.push(m); }
+      m.orders++; m.revenue += s.total;
+    });
+    dayList.sort(function (a, b) { return a.key < b.key ? -1 : 1; });
+    monthList.sort(function (a, b) { return a.key < b.key ? -1 : 1; });
+    return { days: dayList, months: months, monthList: monthList };
+  }
+
+  function weekdayOf(dayKey) {
+    var p = String(dayKey).split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2])
+      .toLocaleDateString(state.lang === 'ar' ? 'ar' : 'en-GB', { weekday: 'long' });
+  }
+  function sectionRow(title, span) {
+    var row = [cTxt(title, ST.sect)];
+    for (var i = 1; i < (span || 1); i++) row.push(cTxt('', ST.sect));   // paint the whole band
+    return row;
+  }
+  function headRow(labels) {
+    return labels.map(function (l) { return cTxt(l, ST.head); });
+  }
+
+  function buildWorkbook() {
+    var sales = D.getSales().slice().sort(function (a, b) { return a.ts - b.ts; });
+    var exps = D.getExpenses().slice().sort(function (a, b) { return a.ts - b.ts; });
+    var all = D.allTime();
+    var roll = salesRollup(sales);
     var expTotal = exps.reduce(function (a, e) { return a + (e.amount || 0); }, 0);
-    var profit = s.revenue - expTotal;
-    var COLS = 10;
-    var m = function (v) { return D.money(v, 'en'); };
-    var spacer = '<tr><td colspan="' + COLS + '"></td></tr>';
-    var section = function (title) {
-      return '<tr><th colspan="' + COLS + '" style="background:#5a3114;color:#ffffff;text-align:left;font-size:13px">' + title + '</th></tr>';
-    };
-    var head = function (cells) {
-      return '<tr style="background:#fbf5ec;font-weight:bold">' + cells.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>';
-    };
-    var out = '';
+    var stamp = new Date().toLocaleString(state.lang === 'ar' ? 'ar' : 'en-GB');
+    var OMR = ' (OMR)';
 
-    // title
-    out += '<tr><th colspan="' + COLS + '" style="font-size:15px;text-align:left">Khamra — ' + t('navReports') + ' — ' + escapeHtml(scopeLabel()) + '</th></tr>';
-    out += '<tr><td colspan="' + COLS + '">' + t('generatedOn') + ': ' + new Date().toLocaleString('en-GB') + '</td></tr>';
-    out += spacer;
-
-    // summary
-    out += section(t('summary'));
-    [[t('revenue') + ' (OMR)', m(s.revenue)], [t('orders'), s.orders], [t('itemsSold'), s.items],
-     [t('avgOrder') + ' (OMR)', m(s.avg)], [t('cash') + ' (OMR)', m(s.cash)], [t('card') + ' (OMR)', m(s.card)],
-     [t('totalExpenses') + ' (OMR)', m(expTotal)]
-    ].forEach(function (r) {
-      out += '<tr><td colspan="3">' + r[0] + '</td><td>' + r[1] + '</td></tr>';
+    // expenses per month + per category, and fold the month totals into the rollup
+    var byCat = {}, catList = [];
+    exps.forEach(function (e) {
+      var mk = D.monthOf(e.day), m = roll.months[mk];
+      if (!m) { m = roll.months[mk] = { key: mk, orders: 0, revenue: 0, expenses: 0 }; roll.monthList.push(m); }
+      m.expenses += e.amount || 0;
+      var c = byCat[e.category];
+      if (!c) { c = byCat[e.category] = { key: e.category, count: 0, total: 0 }; catList.push(c); }
+      c.count++; c.total += e.amount || 0;
     });
-    out += '<tr style="font-weight:bold"><td colspan="3">' + t('netProfit') + ' (OMR)</td><td>' + m(profit) + '</td></tr>';
-    out += spacer;
+    roll.monthList.sort(function (a, b) { return a.key < b.key ? -1 : 1; });
+    catList.sort(function (a, b) { return b.total - a.total; });
 
-    // last 7 days (same window as the on-screen chart)
-    out += section(t('last7'));
-    out += head([t('expDate'), t('orders'), t('revenue') + ' (OMR)']);
-    D.lastDays(7).forEach(function (d) {
-      var wd = d.date.toLocaleDateString('en-GB', { weekday: 'short' });
-      out += '<tr><td>' + d.key + ' (' + wd + ')</td><td>' + d.orders + '</td><td>' + m(d.revenue) + '</td></tr>';
+    // ---- Sheet 1: Overview ---------------------------------------------
+    var ov = [];
+    ov.push([cTxt('Khamra — ' + t('navReports'), ST.title)]);
+    ov.push([cTxt(t('generatedOn')), cTxt(stamp)]);
+    ov.push([cTxt(t('period')), cTxt(sales.length ? (roll.days[0].key + '  →  ' + roll.days[roll.days.length - 1].key) : t('noSales'))]);
+    ov.push([]);
+    ov.push(sectionRow(t('summary'), 5));
+    [[t('revenue') + OMR, cMny(all.revenue, true)],
+     [t('orders'), cNum(all.orders)],
+     [t('itemsSold'), cNum(all.items)],
+     [t('avgOrder') + OMR, cMny(all.avg)],
+     [t('cash') + OMR, cMny(all.cash)],
+     [t('card') + OMR, cMny(all.card)],
+     [t('totalExpenses') + OMR, cMny(expTotal)]
+    ].forEach(function (r) { ov.push([cTxt(r[0]), r[1]]); });
+    ov.push([cTxt(t('netProfit') + OMR, ST.bold), cMny(all.revenue - expTotal, true)]);
+    ov.push([]);
+
+    ov.push(sectionRow(t('byMonth'), 5));
+    ov.push(headRow([t('monthLabel'), t('orders'), t('revenue') + OMR, t('totalExpenses') + OMR, t('netProfit') + OMR]));
+    roll.monthList.forEach(function (m) {
+      ov.push([cTxt(m.key), cNum(m.orders), cMny(m.revenue), cMny(m.expenses), cMny(m.revenue - m.expenses)]);
     });
-    out += spacer;
+    if (!roll.monthList.length) ov.push([cTxt(t('noSales'))]);
+    ov.push([]);
 
-    // best sellers
-    out += section(t('bestSellers'));
-    out += head([t('rank'), t('product') + ' (AR)', t('product') + ' (EN)', t('qty'), t('revenue') + ' (OMR)']);
-    if (!s.products.length) out += '<tr><td colspan="5">' + t('noSales') + '</td></tr>';
-    else s.products.forEach(function (p, i) {
-      out += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(p.ar) + '</td><td>' + escapeHtml(p.en) + '</td>' +
-        '<td>' + p.qty + '</td><td>' + m(p.revenue) + '</td></tr>';
+    ov.push(sectionRow(t('bestSellers'), 5));
+    ov.push(headRow([t('rank'), t('product') + ' (AR)', t('product') + ' (EN)', t('qty'), t('revenue') + OMR]));
+    all.products.forEach(function (p, i) {
+      ov.push([cNum(i + 1), cTxt(p.ar), cTxt(p.en), cNum(p.qty), cMny(p.revenue)]);
     });
-    out += spacer;
+    if (!all.products.length) ov.push([cTxt(t('noSales'))]);
 
-    // expenses for the same period, then the profit they leave behind
-    out += section(t('navExpenses'));
-    out += head([t('expDate'), t('category'), t('expDesc'), t('amount') + ' (OMR)']);
-    if (!exps.length) out += '<tr><td colspan="4">' + t('noExpenses') + '</td></tr>';
-    else exps.forEach(function (e) {
-      out += '<tr><td>' + e.day + '</td><td>' + escapeHtml(catLabel(e.category)) + '</td>' +
-        '<td>' + escapeHtml(e.desc) + '</td><td>' + m(e.amount || 0) + '</td></tr>';
+    // ---- Sheet 2: Revenue (detailed) -----------------------------------
+    var rv = [];
+    rv.push([cTxt('Khamra — ' + t('sheetRevenue'), ST.title)]);
+    rv.push([cTxt(t('generatedOn')), cTxt(stamp)]);
+    rv.push([]);
+    rv.push(sectionRow(t('dailyTotals'), 7));
+    rv.push(headRow([t('expDate'), t('weekday'), t('orders'), t('itemsSold'), t('cash') + OMR, t('card') + OMR, t('revenue') + OMR]));
+    roll.days.forEach(function (d) {
+      rv.push([cTxt(d.key), cTxt(weekdayOf(d.key)), cNum(d.orders), cNum(d.items), cMny(d.cash), cMny(d.card), cMny(d.revenue)]);
     });
-    out += '<tr style="font-weight:bold"><td colspan="3">' + t('totalExpenses') + '</td><td>' + m(expTotal) + '</td></tr>';
-    out += '<tr><td colspan="3">' + t('revenue') + '</td><td>' + m(s.revenue) + '</td></tr>';
-    out += '<tr style="font-weight:bold"><td colspan="3">' + t('netProfit') + '</td><td>' + m(profit) + '</td></tr>';
-    out += spacer;
+    if (!roll.days.length) rv.push([cTxt(t('noSales'))]);
+    else rv.push([cTxt(t('grandTotal'), ST.bold), null, cNum(all.orders), cNum(all.items),
+                  cMny(all.cash, true), cMny(all.card, true), cMny(all.revenue, true)]);
+    rv.push([]);
 
-    // every order, one row per line item
-    out += section(t('allOrders'));
-    out += head([t('orderNo'), t('expDate'), t('time'), t('paymentMethod'), t('product') + ' (AR)',
-                 t('product') + ' (EN)', t('qty'), t('unitPrice') + ' (OMR)', t('lineTotal') + ' (OMR)', t('orderTotal') + ' (OMR)']);
-    if (!sales.length) out += '<tr><td colspan="' + COLS + '">' + t('noSales') + '</td></tr>';
-    else sales.forEach(function (sale) {
+    rv.push(sectionRow(t('allOrders'), 10));
+    rv.push(headRow([t('orderNo'), t('expDate'), t('time'), t('paymentMethod'), t('product') + ' (AR)',
+                     t('product') + ' (EN)', t('qty'), t('unitPrice') + OMR, t('lineTotal') + OMR, t('orderTotal') + OMR]));
+    sales.forEach(function (sale) {
       var time = new Date(sale.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       sale.items.forEach(function (it, i) {
-        // The order total sits on the first line only, so a column sum stays correct.
-        out += '<tr><td>' + sale.no + '</td><td>' + sale.day + '</td><td>' + time + '</td><td>' + t(sale.method) + '</td>' +
-          '<td>' + escapeHtml(it.ar) + '</td><td>' + escapeHtml(it.en) + '</td><td>' + it.qty + '</td>' +
-          '<td>' + m(it.price) + '</td><td>' + m(it.price * it.qty) + '</td>' +
-          '<td>' + (i === 0 ? m(sale.total) : '') + '</td></tr>';
+        // Order total only on the first line, so summing the column stays correct.
+        rv.push([cNum(sale.no), cTxt(sale.day), cTxt(time), cTxt(t(sale.method)),
+                 cTxt(it.ar), cTxt(it.en), cNum(it.qty), cMny(it.price), cMny(it.price * it.qty),
+                 i === 0 ? cMny(sale.total) : null]);
       });
     });
-    out += '<tr style="font-weight:bold"><td colspan="9">' + t('grandTotal') + ' (OMR)</td><td>' + m(s.revenue) + '</td></tr>';
+    if (!sales.length) rv.push([cTxt(t('noSales'))]);
+    else rv.push([cTxt(t('grandTotal'), ST.bold), null, null, null, null, null, null, null, null, cMny(all.revenue, true)]);
 
-    return xlsWrap(out);
+    // ---- Sheet 3: Expenses (detailed) ----------------------------------
+    var ex = [];
+    ex.push([cTxt('Khamra — ' + t('navExpenses'), ST.title)]);
+    ex.push([cTxt(t('generatedOn')), cTxt(stamp)]);
+    ex.push([]);
+    ex.push(sectionRow(t('summary'), 4));
+    ex.push([cTxt(t('revenue') + OMR), cMny(all.revenue)]);
+    ex.push([cTxt(t('totalExpenses') + OMR), cMny(expTotal)]);
+    ex.push([cTxt(t('netProfit') + OMR, ST.bold), cMny(all.revenue - expTotal, true)]);
+    ex.push([]);
+
+    ex.push(sectionRow(t('byCategory'), 4));
+    ex.push(headRow([t('category'), t('count'), t('amount') + OMR]));
+    catList.forEach(function (c) { ex.push([cTxt(catLabel(c.key)), cNum(c.count), cMny(c.total)]); });
+    if (!catList.length) ex.push([cTxt(t('noExpenses'))]);
+    ex.push([]);
+
+    ex.push(sectionRow(t('byMonth'), 4));
+    ex.push(headRow([t('monthLabel'), t('totalExpenses') + OMR]));
+    roll.monthList.forEach(function (m) { if (m.expenses) ex.push([cTxt(m.key), cMny(m.expenses)]); });
+    ex.push([]);
+
+    ex.push(sectionRow(t('allExpenses'), 4));
+    ex.push(headRow([t('expDate'), t('category'), t('expDesc'), t('amount') + OMR]));
+    exps.forEach(function (e) {
+      ex.push([cTxt(e.day), cTxt(catLabel(e.category)), cTxt(e.desc), cMny(e.amount || 0)]);
+    });
+    if (!exps.length) ex.push([cTxt(t('noExpenses'))]);
+    else ex.push([cTxt(t('grandTotal'), ST.bold), null, null, cMny(expTotal, true)]);
+
+    return buildXlsx([
+      { name: t('sheetOverview'), rows: ov, widths: [26, 22, 22, 18, 18] },
+      { name: t('sheetRevenue'),  rows: rv, widths: [10, 13, 9, 13, 22, 22, 8, 13, 13, 13] },
+      { name: t('navExpenses'),   rows: ex, widths: [16, 18, 34, 16] }
+    ]);
+  }
+
+  // Pull the server's copy first so the workbook covers every device, then
+  // download. A dead connection must not leave the booth staring at nothing,
+  // so the refresh gets a short leash and we fall back to the local cache —
+  // which holds the same data the screen is showing anyway.
+  function downloadWorkbook() {
+    toast(t('preparingFile'));
+    var done = false;
+    var emit = function () {
+      if (done) return;
+      done = true;
+      download('khamra-report-' + D.dayKey() + '.xlsx', buildWorkbook(),
+               'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    };
+    setTimeout(emit, 6000);
+    D.refreshSales(function () { D.refreshExpenses(emit); });
   }
 
   // =====================================================================
@@ -769,7 +857,7 @@
         });
       };
     });
-    $('#dlExcel').onclick = function () { download('khamra-expenses-' + (state.expMonth || 'all') + '.xls', expensesToExcel(mk), 'application/vnd.ms-excel'); };
+    $('#dlExcel').onclick = downloadWorkbook;
     $$('#expList .exp-row').forEach(function (row) {
       var id = row.dataset.id;
       $$('[data-f]', row).forEach(function (inp) {
@@ -791,25 +879,6 @@
         });
       };
     });
-  }
-
-  // Expenses report as an Excel-openable file (HTML table saved as .xls).
-  function expensesToExcel(mk) {
-    var exps = D.getExpenses().filter(function (e) { return !mk || D.monthOf(e.day) === mk; }).sort(function (a, b) { return a.ts - b.ts; });
-    var fin = D.finance(mk);
-    var title = state.expMonth === 'all' ? t('allTime') : monthLabelText(state.expMonth);
-    var esc = escapeHtml;
-    var rows = exps.map(function (e) {
-      return '<tr><td>' + e.day + '</td><td>' + esc(catLabel(e.category)) + '</td><td>' + esc(e.desc) + '</td><td>' + (e.amount || 0).toFixed(3) + '</td></tr>';
-    }).join('');
-    return xlsWrap(
-      '<tr><th colspan="4" style="font-size:15px;text-align:left">Khamra — ' + t('navExpenses') + ' — ' + esc(title) + '</th></tr>' +
-      '<tr style="background:#eee"><th>' + t('expDate') + '</th><th>' + t('category') + '</th><th>' + t('expDesc') + '</th><th>' + t('amount') + ' (OMR)</th></tr>' +
-      rows +
-      '<tr><td colspan="3" style="font-weight:bold">' + t('totalExpenses') + '</td><td style="font-weight:bold">' + fin.expenses.toFixed(3) + '</td></tr>' +
-      '<tr><td colspan="3">' + t('revenue') + '</td><td>' + fin.revenue.toFixed(3) + '</td></tr>' +
-      '<tr><td colspan="3" style="font-weight:bold">' + t('netProfit') + '</td><td style="font-weight:bold">' + fin.profit.toFixed(3) + '</td></tr>'
-    );
   }
 
   // =====================================================================
@@ -1086,7 +1155,10 @@
     toastTimer = setTimeout(function () { el.classList.remove('on'); }, 2200);
   }
   function download(name, content, type) {
-    var blob = new Blob([content], { type: type + ';charset=utf-8' });
+    // .xlsx arrives as raw bytes — tagging those with a charset would be a lie
+    // and can make Excel refuse the file.
+    var binary = typeof content !== 'string';
+    var blob = new Blob([content], { type: binary ? type : type + ';charset=utf-8' });
 
     // Safari before iOS 13 (the booth iPad — iPad mini 3 / iOS 12) ignores the
     // `download` attribute and won't save a blob from a synthetic click, so every
@@ -1151,11 +1223,203 @@
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
-  // Minimal Excel-openable workbook: an HTML table saved as .xls. No library,
-  // so it still works offline on the booth iPad.
-  function xlsWrap(rows) {
-    return '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>' +
-      '<table border="1" cellspacing="0" cellpadding="4">' + rows + '</table></body></html>';
+  // =====================================================================
+  // XLSX WRITER — a real multi-sheet workbook, no libraries
+  // An .xlsx is a ZIP of XML parts. Parts are stored uncompressed (ZIP
+  // "store"), which keeps the whole writer small enough to ship inline and
+  // running on the booth iPad's iOS 12 Safari. Excel, Numbers and Sheets all
+  // open the result; numbers stay numbers, so the client can sum and filter.
+  // =====================================================================
+  var XMLH = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  // Style ids, in the order they are declared in xlsxStyles().
+  var ST = { norm: 0, bold: 1, title: 2, sect: 3, head: 4, money: 5, moneyBold: 6 };
+
+  function xmlEsc(s) {
+    return String(s == null ? '' : s)
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')   // control chars are illegal in XML
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  }
+  function colName(i) {                 // 0 -> A, 25 -> Z, 26 -> AA
+    var s = '', n = i + 1;
+    while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = (n - r - 1) / 26; }
+    return s;
+  }
+  // Cell helpers. A row is an array of these (or null for a blank cell).
+  function cTxt(v, style) { return { t: String(v == null ? '' : v), s: style || 0 }; }
+  function cNum(v, style) { return { n: Number(v) || 0, s: style || 0 }; }
+  function cMny(v, bold)  { return { n: Math.round((Number(v) || 0) * 1000) / 1000, s: bold ? ST.moneyBold : ST.money }; }
+
+  function sheetXml(rows, widths) {
+    var cols = '';
+    if (widths && widths.length) {
+      cols = '<cols>' + widths.map(function (w, i) {
+        return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
+      }).join('') + '</cols>';
+    }
+    var body = rows.map(function (cells, r) {
+      var rn = r + 1;
+      var out = cells.map(function (c, i) {
+        if (c == null) return '';
+        var ref = colName(i) + rn, st = c.s ? ' s="' + c.s + '"' : '';
+        if ('n' in c) return '<c r="' + ref + '"' + st + '><v>' + c.n + '</v></c>';
+        return '<c r="' + ref + '" t="inlineStr"' + st + '><is><t xml:space="preserve">' + xmlEsc(c.t) + '</t></is></c>';
+      }).join('');
+      return '<row r="' + rn + '">' + out + '</row>';
+    }).join('');
+    return XMLH + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      cols + '<sheetData>' + body + '</sheetData></worksheet>';
+  }
+
+  function xlsxStyles() {
+    return XMLH + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.000"/></numFmts>' +
+      '<fonts count="4">' +
+        '<font><sz val="11"/><name val="Calibri"/></font>' +
+        '<font><b/><sz val="11"/><name val="Calibri"/></font>' +
+        '<font><b/><sz val="15"/><color rgb="FF5A3114"/><name val="Calibri"/></font>' +
+        '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>' +
+      '</fonts>' +
+      '<fills count="4">' +
+        '<fill><patternFill patternType="none"/></fill>' +
+        '<fill><patternFill patternType="gray125"/></fill>' +
+        '<fill><patternFill patternType="solid"><fgColor rgb="FF5A3114"/><bgColor indexed="64"/></patternFill></fill>' +
+        '<fill><patternFill patternType="solid"><fgColor rgb="FFFBF5EC"/><bgColor indexed="64"/></patternFill></fill>' +
+      '</fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="7">' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+        '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+        '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+        '<xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+        '<xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+        '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+        '<xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>' +
+      '</cellXfs></styleSheet>';
+  }
+
+  // sheets: [{ name, rows, widths }] -> Uint8Array of a .xlsx file
+  function buildXlsx(sheets) {
+    var REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    var files = [];
+
+    files.push({ name: '[Content_Types].xml', text: XMLH +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      sheets.map(function (s, i) {
+        return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+      }).join('') +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      '</Types>' });
+
+    files.push({ name: '_rels/.rels', text: XMLH +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="' + REL + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' });
+
+    files.push({ name: 'xl/workbook.xml', text: XMLH +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="' + REL + '"><sheets>' +
+      sheets.map(function (s, i) {
+        // Excel forbids : \ / ? * [ ] in sheet names and caps them at 31 chars.
+        var nm = String(s.name).replace(/[:\\\/?*\[\]]/g, ' ').slice(0, 31);
+        return '<sheet name="' + xmlEsc(nm) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>';
+      }).join('') + '</sheets></workbook>' });
+
+    files.push({ name: 'xl/_rels/workbook.xml.rels', text: XMLH +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      sheets.map(function (s, i) {
+        return '<Relationship Id="rId' + (i + 1) + '" Type="' + REL + '/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>';
+      }).join('') +
+      '<Relationship Id="rId' + (sheets.length + 1) + '" Type="' + REL + '/styles" Target="styles.xml"/>' +
+      '</Relationships>' });
+
+    files.push({ name: 'xl/styles.xml', text: xlsxStyles() });
+    sheets.forEach(function (s, i) {
+      files.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', text: sheetXml(s.rows, s.widths) });
+    });
+
+    return zipStore(files.map(function (f) { return { name: f.name, bytes: utf8Bytes(f.text) }; }));
+  }
+
+  function utf8Bytes(str) {
+    var out = [], i, c;
+    for (i = 0; i < str.length; i++) {
+      c = str.charCodeAt(i);
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+      else if (c >= 0xD800 && c <= 0xDBFF) {          // surrogate pair -> 4 bytes
+        c = 0x10000 + ((c & 0x3FF) << 10) + (str.charCodeAt(++i) & 0x3FF);
+        out.push(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 0x3F), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+      } else out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+    }
+    return new Uint8Array(out);
+  }
+
+  var CRC_TABLE = null;
+  function crc32(bytes) {
+    if (!CRC_TABLE) {
+      CRC_TABLE = new Int32Array(256);
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        CRC_TABLE[n] = c;
+      }
+    }
+    var crc = -1;
+    for (var i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ bytes[i]) & 0xFF];
+    return (crc ^ -1) >>> 0;
+  }
+
+  // ZIP with the "store" (no compression) method — enough for an .xlsx.
+  function zipStore(files) {
+    var chunks = [], central = [], offset = 0, DOS_1980 = 0x21;
+    files.forEach(function (f) {
+      var name = utf8Bytes(f.name), data = f.bytes, crc = crc32(data);
+      var local = new Uint8Array(30 + name.length), lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true);      // names are UTF-8
+      lv.setUint16(8, 0, true);           // stored
+      lv.setUint16(10, 0, true);
+      lv.setUint16(12, DOS_1980, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, data.length, true);
+      lv.setUint32(22, data.length, true);
+      lv.setUint16(26, name.length, true);
+      local.set(name, 30);
+      chunks.push(local, data);
+
+      var cd = new Uint8Array(46 + name.length), cv = new DataView(cd.buffer);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0x0800, true);
+      cv.setUint16(10, 0, true); cv.setUint16(12, 0, true);
+      cv.setUint16(14, DOS_1980, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, data.length, true);
+      cv.setUint32(24, data.length, true);
+      cv.setUint16(28, name.length, true);
+      cv.setUint32(42, offset, true);
+      cd.set(name, 46);
+      central.push(cd);
+      offset += local.length + data.length;
+    });
+
+    var cdSize = central.reduce(function (a, c) { return a + c.length; }, 0);
+    var end = new Uint8Array(22), ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(8, files.length, true);
+    ev.setUint16(10, files.length, true);
+    ev.setUint32(12, cdSize, true);
+    ev.setUint32(16, offset, true);
+
+    var all = chunks.concat(central, [end]);
+    var total = all.reduce(function (a, c) { return a + c.length; }, 0);
+    var out = new Uint8Array(total), at = 0;
+    all.forEach(function (c) { out.set(c, at); at += c.length; });
+    return out;
   }
 
   function updateClock() {

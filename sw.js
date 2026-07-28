@@ -2,15 +2,15 @@
    Precaches the app on install, then serves cache-first so it works fully
    offline. Anything fetched while online (incl. Google Fonts) is cached too.
    Bump CACHE when you change app files to force the iPad to pull the update. */
-var CACHE = 'khamra-v24';
+var CACHE = 'khamra-v25';
 
 var CORE = [
   './',
   'index.html',
   'manifest.json',
-  'css/styles.css?v=24',
-  'js/data.js?v=24',
-  'js/app.js?v=24',
+  'css/styles.css?v=25',
+  'js/data.js?v=25',
+  'js/app.js?v=25',
   'assets/logo.png',
   'assets/logo-light.png',
   'assets/icon-152.png',
